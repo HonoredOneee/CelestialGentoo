@@ -27,19 +27,19 @@ BDEPEND="dev-vcs/git-lfs"
 S="${WORKDIR}"
 
 src_unpack() {
-	ar x "${DISTDIR}/CMCLIENT-Linux-1.4.5.deb" || die
-	tar -xf data.tar.* || die
+	ar x "${DISTDIR}/CMCLIENT-Linux-1.4.5.deb" || die "Falha ao extrair .deb"
+	tar -xf data.tar.* || die "Falha ao extrair data.tar.*"
 }
 
 src_install() {
-	# Instalar arquivos do app
+	# Instalar arquivos do app, copiando para o diretório correto
 	insinto /opt/CMCLIENT
-	doins -r opt/CMCLIENT/*
+	doins -r opt/CMCLIENT/* || die "Falha ao copiar arquivos para /opt/CMCLIENT"
 
-	# Tornar o executável... executável
+	# Ajustar permissões do executável
 	fperms +x /opt/CMCLIENT/cmlauncher
 
-	# Criar wrapper script básico
+	# Criar wrapper script no /usr/bin para facilitar execução
 	exeinto /usr/bin
 	newexe - cmclient <<EOF
 #!/bin/sh
@@ -57,10 +57,8 @@ fi
 exec /opt/CMCLIENT/cmlauncher "\$@"
 EOF
 
-	# Caminho base dos ícones extraídos
+	# Instalar ícones nas resoluções padrão
 	local iconpath="${WORKDIR}/usr/share/icons/hicolor"
-
-	# Copiar e renomear ícones por tamanho
 	for size in 16 22 24 32 48 64 96 128 256; do
 		local src_icon="${iconpath}/${size}x${size}/apps/cmlauncher.png"
 		if [[ -f "${src_icon}" ]]; then
@@ -69,13 +67,13 @@ EOF
 		fi
 	done
 
-	# Fallback para pixmaps (usa 256x256 como base se existir)
+	# Instalar fallback para pixmaps
 	if [[ -f "${iconpath}/256x256/apps/cmlauncher.png" ]]; then
 		insinto /usr/share/pixmaps
 		newins "${iconpath}/256x256/apps/cmlauncher.png" cmclient.png
 	fi
 
-	# Criar .desktop
+	# Criar arquivo .desktop para integração no menu
 	insinto /usr/share/applications
 	cat > "${D}/usr/share/applications/cmclient.desktop" <<EOF
 [Desktop Entry]
