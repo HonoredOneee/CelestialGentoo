@@ -42,9 +42,14 @@ python_prepare_all() {
 		sed -i 's/Categories=.*/Categories=System;Security;/' data/gufw.desktop.in || die
 	fi
 	
-	# Fix shebang if needed
+	# Fix pkexec script - this is critical for the syntax error
 	if [[ -f bin/gufw-pkexec ]]; then
-		sed -i '1s|.*|#!/usr/bin/env python3|' bin/gufw-pkexec || die
+		# Create a proper pkexec script
+		cat > bin/gufw-pkexec << 'EOF'
+#!/bin/bash
+pkexec python3 /usr/share/gufw/gufw/gufw.py "$@"
+EOF
+		chmod +x bin/gufw-pkexec || die
 	fi
 	
 	distutils-r1_python_prepare_all
@@ -73,6 +78,39 @@ python_compile_all() {
 python_install_all() {
 	distutils-r1_python_install_all
 	
+	# Create a proper launcher script
+	cat > "${T}/gufw-launcher" << 'EOF'
+#!/usr/bin/env python3
+import sys
+import os
+import subprocess
+
+def main():
+    """Main launcher for GUFW"""
+    try:
+        # Try to import and run gufw directly
+        from gufw.gufw import main as gufw_main
+        gufw_main()
+    except ImportError:
+        try:
+            # Alternative: try to run as module
+            subprocess.run([sys.executable, '-m', 'gufw'])
+        except Exception:
+            # Final fallback: try to run the main script directly
+            script_path = '/usr/share/gufw/gufw/gufw.py'
+            if os.path.exists(script_path):
+                subprocess.run([sys.executable, script_path])
+            else:
+                print("Error: Could not find GUFW main script")
+                sys.exit(1)
+
+if __name__ == '__main__':
+    main()
+EOF
+	
+	# Install the launcher script
+	python_newscript "${T}/gufw-launcher" gufw
+	
 	# Install UI files - this is the critical part that was missing
 	if [[ -d data/ui ]]; then
 		insinto /usr/share/gufw/ui
@@ -83,6 +121,12 @@ python_install_all() {
 	if [[ -d data ]]; then
 		insinto /usr/share/gufw
 		doins -r data/*
+	fi
+	
+	# Install the actual gufw module files to /usr/share/gufw/ as well
+	if [[ -d gufw ]]; then
+		insinto /usr/share/gufw
+		doins -r gufw
 	fi
 	
 	# Install desktop file
@@ -116,7 +160,7 @@ python_install_all() {
 		doins build/share/polkit-1/actions/com.ubuntu.pkexec.gufw.policy
 	fi
 	
-	# Install pkexec script
+	# Install corrected pkexec script
 	if [[ -f bin/gufw-pkexec ]]; then
 		dobin bin/gufw-pkexec
 	fi
