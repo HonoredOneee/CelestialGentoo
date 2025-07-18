@@ -12,6 +12,7 @@ SRC_URI="https://cdn.cmclient.pl/launcher/linux/CMCLIENT-Linux-${PV}.deb"
 LICENSE="all-rights-reserved"
 SLOT="0"
 KEYWORDS="~amd64"
+IUSE=""
 RESTRICT="mirror bindist"
 
 RDEPEND="
@@ -20,6 +21,11 @@ RDEPEND="
 	app-accessibility/at-spi2-atk
 	x11-libs/gtk+:3
 	media-libs/alsa-lib
+	media-libs/mesa[gbm]
+	x11-libs/libdrm
+	x11-libs/libxkbcommon
+	x11-libs/libxss
+	x11-libs/libxtst
 "
 
 DEPEND="${RDEPEND}"
@@ -28,19 +34,19 @@ BDEPEND="dev-vcs/git-lfs"
 S="${WORKDIR}"
 
 src_unpack() {
-	ar x "${DISTDIR}/CMCLIENT-Linux-${PV}.deb" || die "Falha ao extrair .deb"
-	tar -xf data.tar.* || die "Falha ao extrair data.tar.*"
+	ar x "${DISTDIR}/CMCLIENT-Linux-${PV}.deb" || die "Failed to extract .deb"
+	tar -xf data.tar.* || die "Failed to extract data.tar.*"
 }
 
 src_install() {
-	# Instalar os arquivos do aplicativo
+	# Install application files
 	insinto /opt/CMCLIENT
-	doins -r opt/CMCLIENT/* || die "Falha ao instalar arquivos em /opt/CMCLIENT"
+	doins -r opt/CMCLIENT/* || die "Failed to install files to /opt/CMCLIENT"
 
-	# Permissão de execução
+	# Set executable permission
 	fperms +x /opt/CMCLIENT/cmlauncher
 
-	# Criar wrapper em /usr/bin
+	# Create wrapper script in /usr/bin
 	exeinto /usr/bin
 	newexe - cmclient <<'EOF'
 #!/bin/sh
@@ -55,10 +61,25 @@ if [ ! -f "${SHARED_JSON}" ]; then
     chmod 600 "${SHARED_JSON}"
 fi
 
-exec /opt/CMCLIENT/cmlauncher "$@"
+# Base flags for better compatibility
+BASE_FLAGS="--no-sandbox --disable-gpu-sandbox --disable-software-rasterizer"
+
+# Detect display server and set appropriate flags
+if [ -n "$WAYLAND_DISPLAY" ]; then
+    DISPLAY_FLAGS="--enable-features=UseOzonePlatform --ozone-platform=wayland --enable-wayland-ime"
+elif [ -n "$DISPLAY" ]; then
+    DISPLAY_FLAGS="--enable-features=UseOzonePlatform --ozone-platform=x11"
+else
+    DISPLAY_FLAGS=""
+fi
+
+# Input and keyboard flags for macro support
+INPUT_FLAGS="--disable-features=VizDisplayCompositor --enable-features=WebRTCPipeWireCapturer"
+
+exec /opt/CMCLIENT/cmlauncher $BASE_FLAGS $DISPLAY_FLAGS $INPUT_FLAGS "$@"
 EOF
 
-	# Ícones
+	# Install icons
 	local iconpath="${WORKDIR}/usr/share/icons/hicolor"
 	for size in 16 22 24 32 48 64 96 128 256; do
 		local src_icon="${iconpath}/${size}x${size}/apps/cmlauncher.png"
@@ -68,42 +89,64 @@ EOF
 		fi
 	done
 
-	# Fallback para pixmaps
+	# Fallback icon for pixmaps
 	if [[ -f "${iconpath}/256x256/apps/cmlauncher.png" ]]; then
 		insinto /usr/share/pixmaps
 		newins "${iconpath}/256x256/apps/cmlauncher.png" cmclient.png
 	fi
 
-	# Arquivo .desktop
-	insinto /usr/share/applications
-	cat > "${D}/usr/share/applications/cmclient.desktop" <<EOF
-[Desktop Entry]
-Name=CMClient
-Comment=Minecraft Client Launcher
-GenericName=Minecraft Launcher
-Exec=cmclient
-Icon=cmclient
-Terminal=false
-Type=Application
-Categories=Game;Network;Communication;
-StartupNotify=true
-StartupWMClass=cmclient
-MimeType=application/x-minecraft-launcher;
-Keywords=Minecraft;Game;Launcher;
+	# Create desktop entry
+	make_desktop_entry \
+		"cmclient" \
+		"CMClient" \
+		"cmclient" \
+		"Game;Network;Communication;" \
+		"Comment=Minecraft Client Launcher\nGenericName=Minecraft Launcher\nStartupNotify=true\nStartupWMClass=cmclient\nMimeType=application/x-minecraft-launcher;\nKeywords=Minecraft;Game;Launcher;"
+
+	# Create alternative launcher for troubleshooting
+	exeinto /usr/bin
+	newexe - cmclient-debug <<'EOF'
+#!/bin/sh
+echo "CMClient Debug Mode"
+echo "Display Server: ${XDG_SESSION_TYPE:-unknown}"
+echo "Wayland Display: ${WAYLAND_DISPLAY:-none}"
+echo "X11 Display: ${DISPLAY:-none}"
+echo ""
+
+exec /opt/CMCLIENT/cmlauncher \
+	--no-sandbox \
+	--disable-gpu \
+	--disable-software-rasterizer \
+	--enable-logging \
+	--v=1 \
+	"$@"
 EOF
 }
 
 pkg_postinst() {
 	xdg_icon_cache_update
-	elog "CMClient foi instalado com sucesso!"
+	elog "CMClient has been successfully installed!"
 	elog ""
-	elog "Configurações salvas em:"
+	elog "Configuration saved in:"
 	elog "  ~/.local/share/.minecraft/cmclient/shared.json"
 	elog ""
-	elog "Se o ícone não aparecer, tente:"
+	elog "Usage:"
+	elog "  cmclient           - Normal launcher"
+	elog "  cmclient-debug     - Debug mode with verbose logging"
+	elog ""
+	elog "If macros/shortcuts don't work, try:"
+	elog "  - Make sure your desktop environment supports global shortcuts"
+	elog "  - Check if the application has focus when using macros"
+	elog "  - Use cmclient-debug to see detailed error messages"
+	elog ""
+	elog "If the icon doesn't appear, try:"
 	elog "  gtk-update-icon-cache /usr/share/icons/hicolor"
 	elog ""
-	elog "Documentação e downloads:"
+	elog "For graphics issues, ensure you have proper drivers:"
+	elog "  - AMD: emerge -av mesa"
+	elog "  - NVIDIA: emerge -av nvidia-drivers"
+	elog ""
+	elog "Documentation and downloads:"
 	elog "  https://cm-pack.pl/download"
 }
 
