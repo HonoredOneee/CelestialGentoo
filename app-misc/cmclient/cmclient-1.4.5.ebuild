@@ -60,10 +60,13 @@ if [ ! -f "${SHARED_JSON}" ]; then
 fi
 
 # Base flags for better compatibility and WebGL issues
-BASE_FLAGS="--no-sandbox --disable-gpu --disable-gpu-sandbox --disable-software-rasterizer"
+BASE_FLAGS="--no-sandbox --disable-gpu --disable-gpu-sandbox --disable-software-rasterizer --disable-dev-shm-usage"
 
 # Force software rendering for WebGL issues
-WEBGL_FLAGS="--disable-webgl --disable-webgl2 --disable-accelerated-2d-canvas --disable-accelerated-video-decode"
+WEBGL_FLAGS="--disable-webgl --disable-webgl2 --disable-accelerated-2d-canvas --disable-accelerated-video-decode --disable-background-timer-throttling"
+
+# Memory and performance flags
+PERF_FLAGS="--max-old-space-size=2048 --disable-backgrounding-occluded-windows --disable-renderer-backgrounding"
 
 # Detect display server and set appropriate flags
 if [ -n "$WAYLAND_DISPLAY" ]; then
@@ -75,9 +78,9 @@ else
 fi
 
 # Input and keyboard flags for macro support
-INPUT_FLAGS="--disable-features=VizDisplayCompositor --enable-features=WebRTCPipeWireCapturer"
+INPUT_FLAGS="--disable-features=VizDisplayCompositor"
 
-exec /opt/CMCLIENT/cmlauncher $BASE_FLAGS $WEBGL_FLAGS $DISPLAY_FLAGS $INPUT_FLAGS "$@"
+exec /opt/CMCLIENT/cmlauncher $BASE_FLAGS $WEBGL_FLAGS $PERF_FLAGS $DISPLAY_FLAGS $INPUT_FLAGS "$@"
 EOF
 
 	# Install icons
@@ -127,19 +130,21 @@ exec /opt/CMCLIENT/cmlauncher \
 	"$@"
 EOF
 
-	# Create hardware acceleration launcher for testing
+	# Create alternative minimal launcher
 	exeinto /usr/bin
-	newexe - cmclient-hw <<'EOF'
+	newexe - cmclient-minimal <<'EOF'
 #!/bin/sh
-echo "CMClient Hardware Acceleration Mode"
-echo "Warning: This may not work with all graphics drivers"
+echo "CMClient Minimal Mode - Maximum compatibility"
+echo "Using absolute minimal flags for problematic systems"
 echo ""
 
 exec /opt/CMCLIENT/cmlauncher \
 	--no-sandbox \
-	--enable-gpu-rasterization \
-	--enable-webgl \
-	--enable-webgl2 \
+	--disable-gpu \
+	--disable-dev-shm-usage \
+	--disable-extensions \
+	--disable-plugins \
+	--single-process \
 	"$@"
 EOF
 }
@@ -154,12 +159,13 @@ pkg_postinst() {
 	elog "Usage:"
 	elog "  cmclient           - Normal launcher (software rendering)"
 	elog "  cmclient-debug     - Debug mode with verbose logging"
-	elog "  cmclient-hw        - Hardware acceleration mode (experimental)"
+	elog "  cmclient-minimal   - Minimal mode for problematic systems"
 	elog ""
-	elog "WebGL Issues:"
-	elog "  The default launcher disables WebGL to avoid graphics errors."
-	elog "  If you have good graphics drivers, try 'cmclient-hw' instead."
-	elog "  For troubleshooting graphics issues, use 'cmclient-debug'."
+	elog "If CMClient loads indefinitely:"
+	elog "  1. Try 'cmclient-minimal' for maximum compatibility"
+	elog "  2. Check if Java is properly installed: 'java -version'"
+	elog "  3. Ensure ~/.local/share/.minecraft has proper permissions"
+	elog "  4. Use 'cmclient-debug' to see detailed error messages"
 	elog ""
 	elog "If macros/shortcuts don't work, try:"
 	elog "  - Make sure your desktop environment supports global shortcuts"
