@@ -4,7 +4,6 @@
 EAPI=8
 
 PYTHON_COMPAT=( python3_{9..12} )
-# Corrigido: removido PYTHON_REQ_USE="xml"
 
 inherit python-single-r1 desktop xdg-utils
 
@@ -35,30 +34,32 @@ DEPEND="${RDEPEND}"
 
 BDEPEND="
 	sys-devel/gettext
-	virtual/pkgconfig
-	dev-vcs/git-lfs"
+	virtual/pkgconfig"
 
-# Fixed: Match the actual directory name from the tarball
 S="${WORKDIR}/gui-ufw-${PV}"
 
 src_prepare() {
 	default
 
-	# Fix desktop file
-	sed -i \
-		-e 's/^Categories=.*/Categories=System;Security;/' \
-		-e '/^Icon=/s/gufw/gufw/' \
-		setup.py || die
+	# Fix desktop file if it exists
+	if [[ -f setup.py ]]; then
+		sed -i \
+			-e 's/^Categories=.*/Categories=System;Security;/' \
+			-e '/^Icon=/s/gufw/gufw/' \
+			setup.py 2>/dev/null || true
+	fi
 
-	# Remove hardcoded paths
-	sed -i \
-		-e "s|/usr/share/gufw|${EPREFIX}/usr/share/gufw|g" \
-		-e "s|/usr/bin/gufw|${EPREFIX}/usr/bin/gufw|g" \
-		bin/gufw-pkexec || die
+	# Fix pkexec script paths if it exists
+	if [[ -f bin/gufw-pkexec ]]; then
+		sed -i \
+			-e "s|/usr/share/gufw|${EPREFIX}/usr/share/gufw|g" \
+			-e "s|/usr/bin/gufw|${EPREFIX}/usr/bin/gufw|g" \
+			bin/gufw-pkexec || die
+	fi
 }
 
 src_compile() {
-	# Compile translations (if po directory exists)
+	# Compile translations if po directory exists
 	if [[ -d po ]]; then
 		for po in po/*.po; do
 			if [[ -f "$po" ]]; then
@@ -73,27 +74,69 @@ src_compile() {
 }
 
 src_install() {
-	python_domodule gufw
+	# Install Python module
+	if [[ -d gufw ]]; then
+		python_domodule gufw
+	fi
 
-	# Install bash scripts (not Python scripts)
-	dobin bin/gufw
-	dobin bin/gufw-pkexec
+	# Create a proper Python launcher script
+	cat > "${T}/gufw-launcher" << EOF
+#!/usr/bin/env python3
+import sys
+import os
 
-	# Install desktop file (check if it exists first)
+# Try to import and run gufw
+try:
+    from gufw.gufw import main
+    if __name__ == '__main__':
+        main()
+except ImportError as e:
+    print(f"Error importing gufw: {e}")
+    print("Trying alternative import methods...")
+    
+    # Try different import paths
+    try:
+        import gufw
+        if hasattr(gufw, 'main'):
+            gufw.main()
+        else:
+            print("gufw module found but no main function")
+            sys.exit(1)
+    except ImportError:
+        try:
+            # Try to run as module
+            import subprocess
+            result = subprocess.run([sys.executable, '-m', 'gufw'], 
+                                  capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f"Error running gufw module: {result.stderr}")
+                sys.exit(1)
+        except Exception as e:
+            print(f"Failed to run gufw: {e}")
+            sys.exit(1)
+EOF
+
+	# Install the launcher script
+	python_newscript "${T}/gufw-launcher" gufw
+
+	# Install pkexec script if it exists
+	if [[ -f bin/gufw-pkexec ]]; then
+		dobin bin/gufw-pkexec
+	fi
+
+	# Install desktop file if it exists
 	if [[ -f data/gufw.desktop ]]; then
 		domenu data/gufw.desktop
 	elif [[ -f gufw.desktop ]]; then
 		domenu gufw.desktop
-	else
-		einfo "Desktop file not found, skipping"
 	fi
 
-	# Install icons (check if directory exists)
+	# Install icons if they exist
 	if [[ -d data/icons ]]; then
 		local size
 		for size in 16 22 24 32 48 64 128 256; do
-			if [[ -f data/icons/gufw_${size}.png ]]; then
-				newicon -s ${size} data/icons/gufw_${size}.png gufw.png
+			if [[ -f "data/icons/gufw_${size}.png" ]]; then
+				newicon -s ${size} "data/icons/gufw_${size}.png" gufw.png
 			fi
 		done
 		
@@ -101,42 +144,32 @@ src_install() {
 		if [[ -f data/icons/gufw.svg ]]; then
 			newicon -s scalable data/icons/gufw.svg gufw.svg
 		fi
-	else
-		einfo "Icons directory not found, skipping icons"
 	fi
 
-	# Install translations (check if built)
+	# Install translations if built
 	if [[ -d build/mo ]]; then
 		insinto /usr/share/locale
 		doins -r build/mo/*
-	else
-		einfo "No translations built, skipping"
 	fi
 
-	# Install polkit policy (check if it exists)
+	# Install polkit policy if it exists
 	if [[ -f data/gufw.policy ]]; then
 		insinto /usr/share/polkit-1/actions
 		doins data/gufw.policy
-	else
-		einfo "Polkit policy not found, skipping"
 	fi
 
-	# Install man page (check if it exists)
+	# Install man page if it exists
 	if [[ -f data/gufw.1 ]]; then
 		doman data/gufw.1
 	elif [[ -f gufw.1 ]]; then
 		doman gufw.1
-	else
-		einfo "Man page not found, skipping"
 	fi
 
-	# Install documentation (check if it exists)
+	# Install documentation
 	if [[ -f README.md ]]; then
 		dodoc README.md
 	elif [[ -f README ]]; then
 		dodoc README
-	else
-		einfo "README not found, skipping"
 	fi
 }
 
@@ -195,6 +228,9 @@ pkg_postinst() {
 	elog "• UFW Guide: https://help.ubuntu.com/community/UFW"
 	elog "• Gentoo UFW Wiki: https://wiki.gentoo.org/wiki/Ufw"
 	elog "═══════════════════════════════════════════════════════════════════"
+	elog ""
+	elog "You can now run GUFW by typing: gufw"
+	elog ""
 }
 
 pkg_postrm() {
