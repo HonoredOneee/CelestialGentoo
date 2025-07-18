@@ -18,32 +18,31 @@ RDEPEND="
 	app-arch/unzip
 "
 
+DEPEND="${RDEPEND}"
+BDEPEND=""
+
 S="${WORKDIR}"
 
 src_unpack() {
-	mkdir -p "${S}" || die
-	cp "${DISTDIR}/odin4" "${S}/odin4" || die "Falha ao copiar o binário"
+	: # Nada a descompactar - binário é usado diretamente
 }
 
 src_install() {
-	dobin "${S}/odin4"
-	fperms +x "${ED}/usr/bin/odin4"
-	dosym /usr/bin/odin4 /usr/bin/odin
+	# Instalar o binário em /opt/odin4
+	insinto /opt/odin4
+	doins "${DISTDIR}/odin4"
+	fperms +x "${D}/opt/odin4/odin4"
 
-	insinto /usr/share/applications
-	cat > "${D}/usr/share/applications/odin.desktop" <<EOF
-[Desktop Entry]
-Name=OdinV4
-Comment=Samsung flash tool via terminal
-Exec=odin
-Icon=utilities-terminal
-Terminal=true
-Type=Application
-Categories=System;Utility;Development;
-EOF
+	# Criar atalhos globais em /usr/bin
+	dosym /opt/odin4/odin4 /usr/bin/odin4
+	dosym /opt/odin4/odin4 /usr/bin/odin
 }
 
 pkg_postinst() {
 	elog "OdinV4 foi instalado com sucesso!"
-	elog "Execute com o comando: odin"
+	elog ""
+	elog "Para usar o OdinV4:"
+	elog "  Execute com o comando: odin4 ou odin"
+	elog ""
+	elog "Documentação: https://github.com/Adrilaw/OdinV4"
 }
