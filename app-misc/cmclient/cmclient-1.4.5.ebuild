@@ -7,8 +7,7 @@ inherit desktop xdg-utils
 
 DESCRIPTION="CMClient - Minecraft Client Launcher"
 HOMEPAGE="https://cm-pack.pl"
-SRC_URI="mirror://local/CMCLIENT-Linux-1.4.5.deb"
-
+SRC_URI="https://github.com/HonoredOneee/CelestialGentoo/releases/download/v${PV}/CMCLIENT-Linux-${PV}.deb"
 
 LICENSE="all-rights-reserved"
 SLOT="0"
@@ -22,13 +21,14 @@ RDEPEND="
 	x11-libs/gtk+:3
 	media-libs/alsa-lib
 "
+
 DEPEND="${RDEPEND}"
 BDEPEND="dev-vcs/git-lfs"
 
 S="${WORKDIR}"
 
 src_unpack() {
-	ar x "${DISTDIR}/CMCLIENT-Linux-1.4.5.deb" || die "Falha ao extrair .deb"
+	ar x "${DISTDIR}/CMCLIENT-Linux-${PV}.deb" || die "Falha ao extrair .deb"
 	tar -xf data.tar.* || die "Falha ao extrair data.tar.*"
 }
 
@@ -95,7 +95,6 @@ EOF
 
 pkg_postinst() {
 	xdg_icon_cache_update
-
 	elog "O CMClient foi instalado com sucesso!"
 	elog "Configurações armazenadas em:"
 	elog "  ~/.local/share/.minecraft/cmclient/shared.json"
