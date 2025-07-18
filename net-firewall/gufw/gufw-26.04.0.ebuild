@@ -49,7 +49,7 @@ Comment[pt_BR]=Configure o firewall integrado
 GenericName=Firewall Configuration
 GenericName[pt_BR]=Configuração do Firewall
 Icon=gufw
-Exec=pkexec gufw
+Exec=pkexec env DISPLAY=$DISPLAY XAUTHORITY=$XAUTHORITY XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR python3 /usr/share/gufw/gufw/gufw.py
 Terminal=false
 StartupNotify=true
 Categories=System;Security;
@@ -185,8 +185,27 @@ def main():
     else:
         # Not running as root, try to run with pkexec
         try:
-            # Try to run with pkexec
-            subprocess.run(['pkexec', sys.executable, __file__] + sys.argv[1:])
+            # Preserve X11 environment variables for GUI applications
+            env = os.environ.copy()
+            
+            # Build pkexec command with environment preservation
+            cmd = [
+                'pkexec',
+                '--disable-internal-agent',
+                'env',
+                f'DISPLAY={env.get("DISPLAY", ":0")}',
+                f'XAUTHORITY={env.get("XAUTHORITY", "")}',
+                f'XDG_RUNTIME_DIR={env.get("XDG_RUNTIME_DIR", "")}',
+                f'XDG_SESSION_TYPE={env.get("XDG_SESSION_TYPE", "")}',
+                f'WAYLAND_DISPLAY={env.get("WAYLAND_DISPLAY", "")}',
+                sys.executable,
+                __file__
+            ] + sys.argv[1:]
+            
+            # Remove empty environment variables
+            cmd = [arg for arg in cmd if not arg.endswith('=')]
+            
+            subprocess.run(cmd)
             return
         except FileNotFoundError:
             print("Error: pkexec not found. Please install polkit.")
@@ -273,6 +292,21 @@ if __name__ == '__main__':
     main()
 EOF
 	
+	# Create an alternative wrapper script for pkexec
+	cat > "${T}/gufw-pkexec-wrapper" << 'EOF'
+#!/bin/bash
+
+# Preserve X11 environment variables for GUI applications
+export DISPLAY="${DISPLAY:-:0}"
+export XAUTHORITY="${XAUTHORITY}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}"
+export XDG_SESSION_TYPE="${XDG_SESSION_TYPE}"
+export WAYLAND_DISPLAY="${WAYLAND_DISPLAY}"
+
+# Run GUFW with preserved environment
+exec python3 /usr/share/gufw/gufw/gufw.py "$@"
+EOF
+	
 	# Install the launcher script
 	python_newscript "${T}/gufw-launcher" gufw
 	
@@ -342,8 +376,9 @@ EOF
       <allow_inactive>no</allow_inactive>
       <allow_active>auth_admin_keep</allow_active>
     </defaults>
-    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/gufw</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/share/gufw/gufw/gufw.py</annotate>
     <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">--</annotate>
   </action>
 </policyconfig>
 EOF
