@@ -4,12 +4,20 @@
 
 ## About
 
-This repository contains ebuilds for:
-- Latest upstream software not yet in the official Gentoo tree
-- Experimental packages and bleeding-edge versions
-- Performance-optimized builds and patches
-- Specialized tools for developers and system administrators
-- Custom configurations and enhancements
+This repository contains ebuilds for software that's only available in other package formats, bringing them to Gentoo users:
+
+**Featured Packages:**
+- **cmclient** - Connection Manager client (originally DEB-only)
+- **womic** - Wireless microphone application (originally AppImage-only)
+
+**Categories:**
+- Network management tools and utilities
+- Audio/multimedia applications and drivers
+- System administration tools
+- Development utilities and frameworks
+- Gaming-related packages and optimizations
+- Software converted from DEB, RPM, and AppImage formats
+- Latest upstream versions not yet in the official Gentoo tree
 
 ## Installation
 
@@ -18,6 +26,15 @@ Add the repository using eselect:
 ```bash
 sudo eselect repository add celestialgentoo git https://github.com/HonoredOneee/CelestialGentoo.git
 sudo emerge --sync celestialgentoo
+```
+
+**Install featured packages:**
+```bash
+# Connection Manager client
+sudo emerge cmclient
+
+# Wireless microphone application
+sudo emerge womic
 ```
 
 ## Contributing
