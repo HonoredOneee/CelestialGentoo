@@ -17,7 +17,6 @@ RDEPEND="
 	dev-util/android-tools
 	app-arch/unzip
 "
-
 DEPEND="${RDEPEND}"
 BDEPEND=""
 
@@ -31,7 +30,9 @@ src_install() {
 	# Instalar o binário em /opt/odin4
 	insinto /opt/odin4
 	doins "${DISTDIR}/odin4"
-	fperms +x "${D}/opt/odin4/odin4"
+
+	# Corrigir permissões - usar caminho relativo sem ${D}
+	fperms +x /opt/odin4/odin4
 
 	# Criar atalhos globais em /usr/bin
 	dosym /opt/odin4/odin4 /usr/bin/odin4
