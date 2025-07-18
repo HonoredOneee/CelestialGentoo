@@ -69,8 +69,9 @@ src_compile() {
 src_install() {
 	python_domodule gufw
 
-	python_newscript bin/gufw gufw
-	python_newscript bin/gufw-pkexec gufw-pkexec
+	# Install bash scripts (not Python scripts)
+	dobin bin/gufw
+	dobin bin/gufw-pkexec
 
 	# Install desktop file
 	domenu data/gufw.desktop
