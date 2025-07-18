@@ -7,7 +7,7 @@ inherit desktop xdg-utils
 
 DESCRIPTION="CMClient - Minecraft Client Launcher"
 HOMEPAGE="https://cm-pack.pl"
-SRC_URI="https://raw.githubusercontent.com/HonoredOneee/CelestialGentoo/main/distfiles/CMCLIENT-Linux-1.4.5.deb"
+SRC_URI="mirror://local/CMCLIENT-Linux-1.4.5.deb"
 
 LICENSE="all-rights-reserved"
 SLOT="0"
