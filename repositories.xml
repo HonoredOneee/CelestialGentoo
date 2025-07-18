@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<repositories xmlns="http://www.gentoo.org/dtd/repositories.dtd" version="1.0">
+  <repo quality="experimental" status="unofficial">
+    <name>celestialgentoo</name>
+    <description>CelestialGentoo - Community overlay for cutting-edge packages</description>
+    <homepage>https://github.com/HonoredOneee/CelestialGentoo</homepage>
+    <owner type="person">
+      <email>seu-email@exemplo.com</email>
+      <name>HonoredOneee</name>
+    </owner>
+    <source type="git">https://github.com/HonoredOneee/CelestialGentoo.git</source>
+  </repo>
+</repositories>
