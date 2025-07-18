@@ -3,9 +3,10 @@
 
 EAPI=8
 
-PYTHON_COMPAT=( python3_{9..12} )
+PYTHON_COMPAT=( python3_{10..12} )
+DISTUTILS_USE_PEP517=setuptools
 
-inherit python-single-r1 desktop xdg-utils
+inherit distutils-r1 desktop xdg
 
 DESCRIPTION="Uncomplicated Firewall GUI"
 HOMEPAGE="https://gufw.org/ https://github.com/costales/gufw"
@@ -16,158 +17,207 @@ SLOT="0"
 KEYWORDS="~amd64"
 RESTRICT="mirror"
 
-REQUIRED_USE="${PYTHON_REQUIRED_USE}"
-
-RDEPEND="${PYTHON_DEPS}
-	$(python_gen_cond_dep '
-		dev-python/pygobject:3[${PYTHON_USEDEP}]
-		dev-python/python-distutils-extra[${PYTHON_USEDEP}]
-	')
+RDEPEND="
+	${PYTHON_DEPS}
+	dev-python/pygobject:3[${PYTHON_USEDEP}]
 	net-firewall/ufw
 	x11-libs/gtk+:3[introspection]
 	gnome-base/librsvg:2[introspection]
 	x11-libs/gdk-pixbuf:2[introspection]
 	dev-libs/glib:2[introspection]
-	sys-auth/polkit"
+	sys-auth/polkit
+"
 
 DEPEND="${RDEPEND}"
-
 BDEPEND="
 	sys-devel/gettext
-	virtual/pkgconfig"
+	virtual/pkgconfig
+"
 
 S="${WORKDIR}/gui-ufw-${PV}"
 
-src_prepare() {
-	default
-
-	# Fix desktop file
-	sed -i \
-		-e 's/^Categories=.*/Categories=System;Security;/' \
-		-e '/^Icon=/s/gufw/gufw/' \
-		setup.py || die "sed failed for setup.py"
-
-	# Fix pkexec script paths
-	sed -i \
-		-e "s|/usr/share/gufw|${EPREFIX}/usr/share/gufw|g" \
-		-e "s|/usr/bin/gufw|${EPREFIX}/usr/bin/gufw|g" \
-		bin/gufw-pkexec || die "sed failed for gufw-pkexec"
+python_prepare_all() {
+	# Fix desktop file categories
+	if [[ -f data/gufw.desktop.in ]]; then
+		sed -i 's/Categories=.*/Categories=System;Security;/' data/gufw.desktop.in || die
+	fi
+	
+	# Fix shebang if needed
+	if [[ -f bin/gufw-pkexec ]]; then
+		sed -i '1s|.*|#!/usr/bin/env python3|' bin/gufw-pkexec || die
+	fi
+	
+	distutils-r1_python_prepare_all
 }
 
-src_install() {
-	python_domodule gufw
-
-	# CORREÇÃO CRÍTICA: Instalação de arquivos UI com loop
-	if [[ -d "${S}/gufw/view/ui" ]]; then
-		insinto /usr/share/gufw/ui
-		for ui_file in "${S}"/gufw/view/ui/*.ui; do
-			[[ -f "${ui_file}" ]] && doins "${ui_file}"
-		done
-	elif [[ -d "${S}/ui" ]]; then
-		insinto /usr/share/gufw/ui
-		for ui_file in "${S}"/ui/*.ui; do
-			[[ -f "${ui_file}" ]] && doins "${ui_file}"
-		done
-	else
-		# Fallback para arquivo UI principal
-		if [[ -f "${S}/gufw/view/gufw.ui" ]]; then
-			insinto /usr/share/gufw/ui
-			doins "${S}/gufw/view/gufw.ui"
-		else
-			die "No UI files found!"
-		fi
-	fi
-
-	# Create launcher script
-	cat > "${T}/gufw-launcher" <<-EOF || die
-	#!/usr/bin/env python3
-	import sys
-	import os
-	import subprocess
-
-	def main():
-	    print("GUFW Launcher - Starting...")
-	    try:
-	        from gufw.gufw import main as gufw_main
-	        print("Found main module, starting GUFW")
-	        gufw_main()
-	    except ImportError as e:
-	        print(f"Import error: {e}")
-	        print("Attempting alternative startup method...")
-	        try:
-	            subprocess.run([sys.executable, "-m", "gufw"], check=True)
-	        except Exception as e2:
-	            print(f"Failed to start GUFW: {e2}")
-	            sys.exit(1)
-
-	if __name__ == '__main__':
-	    main()
-	EOF
-
-	python_newscript "${T}/gufw-launcher" gufw
-
-	# Install supporting files
-	dobin bin/gufw-pkexec
-	
-	# Install desktop file
-	if [[ -f data/gufw.desktop ]]; then
-		domenu data/gufw.desktop
-	elif [[ -f gufw.desktop ]]; then
-		domenu gufw.desktop
-	fi
-
-	# Install icons
-	if [[ -d data/icons ]]; then
-		for size in 16 22 24 32 48 64 128 256; do
-			if [[ -f "data/icons/gufw_${size}.png" ]]; then
-				newicon -s ${size} "data/icons/gufw_${size}.png" gufw.png
+python_compile_all() {
+	# Compile translations
+	if [[ -d po ]]; then
+		for po in po/*.po; do
+			if [[ -f "$po" ]]; then
+				local lang=$(basename "$po" .po)
+				mkdir -p "build/mo/$lang/LC_MESSAGES" || die
+				msgfmt "$po" -o "build/mo/$lang/LC_MESSAGES/gufw.mo" || die
 			fi
 		done
-		if [[ -f data/icons/gufw.svg ]]; then
-			newicon -s scalable data/icons/gufw.svg gufw.svg
-		fi
 	fi
+	
+	# Process desktop file
+	if [[ -f data/gufw.desktop.in ]]; then
+		mkdir -p build/share/applications || die
+		msgfmt --desktop --template=data/gufw.desktop.in \
+			-d po -o build/share/applications/gufw.desktop || die
+	fi
+}
 
+python_install_all() {
+	distutils-r1_python_install_all
+	
+	# Install UI files - this is the critical part that was missing
+	if [[ -d data/ui ]]; then
+		insinto /usr/share/gufw/ui
+		doins data/ui/*
+	fi
+	
+	# Install other data files
+	if [[ -d data ]]; then
+		insinto /usr/share/gufw
+		doins -r data/*
+	fi
+	
+	# Install desktop file
+	if [[ -f build/share/applications/gufw.desktop ]]; then
+		domenu build/share/applications/gufw.desktop
+	elif [[ -f data/gufw.desktop ]]; then
+		domenu data/gufw.desktop
+	fi
+	
+	# Install icons
+	local size
+	for size in 16 22 24 32 48 64 128 256; do
+		if [[ -f "data/icons/gufw-${size}.png" ]]; then
+			newicon -s ${size} "data/icons/gufw-${size}.png" gufw.png
+		elif [[ -f "data/icons/gufw_${size}.png" ]]; then
+			newicon -s ${size} "data/icons/gufw_${size}.png" gufw.png
+		fi
+	done
+	
+	# Install scalable icon
+	if [[ -f data/icons/gufw.svg ]]; then
+		newicon -s scalable data/icons/gufw.svg gufw.svg
+	fi
+	
+	# Install polkit policy
+	if [[ -f data/gufw.policy ]]; then
+		insinto /usr/share/polkit-1/actions
+		newins data/gufw.policy com.ubuntu.pkexec.gufw.policy
+	elif [[ -f build/share/polkit-1/actions/com.ubuntu.pkexec.gufw.policy ]]; then
+		insinto /usr/share/polkit-1/actions
+		doins build/share/polkit-1/actions/com.ubuntu.pkexec.gufw.policy
+	fi
+	
+	# Install pkexec script
+	if [[ -f bin/gufw-pkexec ]]; then
+		dobin bin/gufw-pkexec
+	fi
+	
+	# Install man page
+	if [[ -f data/gufw.8 ]]; then
+		doman data/gufw.8
+	elif [[ -f build/share/man/man8/gufw.8 ]]; then
+		doman build/share/man/man8/gufw.8
+	fi
+	
 	# Install translations
 	if [[ -d build/mo ]]; then
 		insinto /usr/share/locale
 		doins -r build/mo/*
 	fi
-
-	# Install policy file
-	if [[ -f data/gufw.policy ]]; then
-		insinto /usr/share/polkit-1/actions
-		doins data/gufw.policy
-	fi
-
+	
 	# Install documentation
-	if [[ -f data/gufw.1 ]]; then
-		doman data/gufw.1
+	if [[ -f README.md ]]; then
+		dodoc README.md
+	elif [[ -f README ]]; then
+		dodoc README
 	fi
-	dodoc README*
+	
+	if [[ -f CHANGELOG ]]; then
+		dodoc CHANGELOG
+	fi
 }
 
 pkg_postinst() {
-	xdg_desktop_database_update
-	xdg_icon_cache_update
-
-	elog "GUFW requires UFW to be enabled and running:"
-	elog "1. Enable UFW service:"
-	elog "   # systemctl enable ufw"
-	elog "2. Start UFW:"
-	elog "   # systemctl start ufw"
-	elog "3. Enable firewall:"
-	elog "   # ufw enable"
-	elog "4. Check status:"
-	elog "   # ufw status verbose"
+	xdg_pkg_postinst
+	
+	elog "═══════════════════════════════════════════════════════════════════"
+	elog "                    GUFW POST-INSTALLATION SETUP"
+	elog "═══════════════════════════════════════════════════════════════════"
 	elog ""
-	elog "Note: Ensure your user is in the 'wheel' group for authentication."
+	elog "GUFW has been successfully installed!"
 	elog ""
-	elog "To verify UI files:"
-	elog "   ls /usr/share/gufw/ui/"
+	elog "REQUIRED SETUP STEPS:"
+	elog ""
+	elog "1. INSTALL UFW (if not already installed):"
+	elog "   emerge net-firewall/ufw"
+	elog ""
+	elog "2. ENABLE UFW SERVICE:"
+	elog "   sudo systemctl enable ufw"
+	elog "   sudo systemctl start ufw"
+	elog ""
+	elog "3. IMPORTANT - ALLOW SSH BEFORE ENABLING UFW:"
+	elog "   sudo ufw allow ssh"
+	elog "   (This prevents being locked out of remote systems)"
+	elog ""
+	elog "4. ENABLE UFW FIREWALL:"
+	elog "   sudo ufw enable"
+	elog ""
+	elog "5. VERIFY UFW STATUS:"
+	elog "   sudo ufw status verbose"
+	elog ""
+	elog "6. ADD USER TO WHEEL GROUP (for polkit authentication):"
+	elog "   sudo usermod -a -G wheel \$USER"
+	elog "   (logout and login again after this)"
+	elog ""
+	elog "7. VERIFY POLKIT SERVICE:"
+	elog "   sudo systemctl status polkit"
+	elog "   (if not running: sudo systemctl enable polkit && sudo systemctl start polkit)"
+	elog ""
+	elog "8. LAUNCH GUFW:"
+	elog "   gufw"
+	elog "   (or search for 'Firewall Configuration' in your application menu)"
+	elog ""
+	elog "═══════════════════════════════════════════════════════════════════"
+	elog "                         IMPORTANT NOTES"
+	elog "═══════════════════════════════════════════════════════════════════"
+	elog ""
+	ewarn "• UFW MUST be enabled BEFORE using GUFW, or GUFW will show errors"
+	ewarn "• Always allow SSH access before enabling UFW on remote systems"
+	ewarn "• Test firewall rules carefully to avoid locking yourself out"
+	elog ""
+	elog "TROUBLESHOOTING:"
+	elog "• If authentication fails: check if user is in 'wheel' group"
+	elog "• If UFW commands fail: verify UFW service is running"
+	elog "• If UI doesn't load: check /usr/share/gufw/ui/ directory exists"
+	elog "• For debugging: run 'gufw' in terminal to see error messages"
+	elog ""
+	elog "USEFUL UFW COMMANDS:"
+	elog "• sudo ufw status verbose    - Show current firewall status"
+	elog "• sudo ufw allow 22/tcp      - Allow SSH"
+	elog "• sudo ufw allow 80/tcp      - Allow HTTP"
+	elog "• sudo ufw allow 443/tcp     - Allow HTTPS"
+	elog "• sudo ufw reload            - Reload firewall rules"
+	elog "• sudo ufw reset             - Reset all rules (use with caution)"
+	elog ""
+	elog "DOCUMENTATION:"
+	elog "• GUFW: https://gufw.org/"
+	elog "• UFW Guide: https://help.ubuntu.com/community/UFW"
+	elog "• Gentoo UFW Wiki: https://wiki.gentoo.org/wiki/Ufw"
+	elog "═══════════════════════════════════════════════════════════════════"
+	elog ""
+	elog "You can now run GUFW by typing: gufw"
+	elog ""
 }
 
 pkg_postrm() {
-	xdg_desktop_database_update
-	xdg_icon_cache_update
+	xdg_pkg_postrm
 }
