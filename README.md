@@ -1,3 +1,4 @@
+
 # CelestialGentoo
 
 **CelestialGentoo** is a community-driven Gentoo overlay focused on providing cutting-edge packages and optimizations for enthusiasts and power users.
@@ -9,6 +10,7 @@ This repository contains ebuilds for software that's only available in other pac
 **Featured Packages:**
 - **cmclient** - Minecraft launcher (originally DEB-only)
 - **womic** - Wireless microphone application (originally AppImage-only)
+- **odin4** - OdinV4 Samsung flash tool (terminal only, binary app)
 
 **Categories:**
 - Gaming applications and launchers
@@ -28,25 +30,31 @@ sudo emerge --sync celestialgentoo
 ```
 
 **Install featured packages:**
+
 ```bash
 # Minecraft launcher
 sudo emerge cmclient
 
 # Wireless microphone application
 sudo emerge womic
+
+# OdinV4 Samsung flash tool (terminal)
+sudo emerge odin4
 ```
 
 ## Contributing
 
 Contributions are welcome! Please:
-- Follow Gentoo packaging standards
-- Test ebuilds thoroughly before submitting
-- Include proper metadata and documentation
-- Submit pull requests with clear descriptions
 
-## Maintainer
+- Follow Gentoo packaging standards  
+- Test ebuilds thoroughly before submitting  
+- Include proper metadata and documentation  
+- Submit pull requests with clear descriptions  
 
-- **HonoredOneee** - Primary maintainer and developer
+## Maintainers
+
+- **HonoredOneee** - Primary maintainer and developer  
+- **Davideveloper89** - Contributor and collaborator  
 
 ## License
 
