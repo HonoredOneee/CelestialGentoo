@@ -59,8 +59,11 @@ if [ ! -f "${SHARED_JSON}" ]; then
     chmod 600 "${SHARED_JSON}"
 fi
 
-# Base flags for better compatibility
-BASE_FLAGS="--no-sandbox --disable-gpu-sandbox --disable-software-rasterizer"
+# Base flags for better compatibility and WebGL issues
+BASE_FLAGS="--no-sandbox --disable-gpu --disable-gpu-sandbox --disable-software-rasterizer"
+
+# Force software rendering for WebGL issues
+WEBGL_FLAGS="--disable-webgl --disable-webgl2 --disable-accelerated-2d-canvas --disable-accelerated-video-decode"
 
 # Detect display server and set appropriate flags
 if [ -n "$WAYLAND_DISPLAY" ]; then
@@ -74,7 +77,7 @@ fi
 # Input and keyboard flags for macro support
 INPUT_FLAGS="--disable-features=VizDisplayCompositor --enable-features=WebRTCPipeWireCapturer"
 
-exec /opt/CMCLIENT/cmlauncher $BASE_FLAGS $DISPLAY_FLAGS $INPUT_FLAGS "$@"
+exec /opt/CMCLIENT/cmlauncher $BASE_FLAGS $WEBGL_FLAGS $DISPLAY_FLAGS $INPUT_FLAGS "$@"
 EOF
 
 	# Install icons
@@ -109,14 +112,34 @@ echo "CMClient Debug Mode"
 echo "Display Server: ${XDG_SESSION_TYPE:-unknown}"
 echo "Wayland Display: ${WAYLAND_DISPLAY:-none}"
 echo "X11 Display: ${DISPLAY:-none}"
+echo "Graphics Info:"
+glxinfo | grep "OpenGL renderer" 2>/dev/null || echo "  No OpenGL info available"
 echo ""
 
 exec /opt/CMCLIENT/cmlauncher \
 	--no-sandbox \
 	--disable-gpu \
-	--disable-software-rasterizer \
+	--disable-webgl \
+	--disable-webgl2 \
+	--disable-accelerated-2d-canvas \
 	--enable-logging \
 	--v=1 \
+	"$@"
+EOF
+
+	# Create hardware acceleration launcher for testing
+	exeinto /usr/bin
+	newexe - cmclient-hw <<'EOF'
+#!/bin/sh
+echo "CMClient Hardware Acceleration Mode"
+echo "Warning: This may not work with all graphics drivers"
+echo ""
+
+exec /opt/CMCLIENT/cmlauncher \
+	--no-sandbox \
+	--enable-gpu-rasterization \
+	--enable-webgl \
+	--enable-webgl2 \
 	"$@"
 EOF
 }
@@ -129,8 +152,14 @@ pkg_postinst() {
 	elog "  ~/.local/share/.minecraft/cmclient/shared.json"
 	elog ""
 	elog "Usage:"
-	elog "  cmclient           - Normal launcher"
+	elog "  cmclient           - Normal launcher (software rendering)"
 	elog "  cmclient-debug     - Debug mode with verbose logging"
+	elog "  cmclient-hw        - Hardware acceleration mode (experimental)"
+	elog ""
+	elog "WebGL Issues:"
+	elog "  The default launcher disables WebGL to avoid graphics errors."
+	elog "  If you have good graphics drivers, try 'cmclient-hw' instead."
+	elog "  For troubleshooting graphics issues, use 'cmclient-debug'."
 	elog ""
 	elog "If macros/shortcuts don't work, try:"
 	elog "  - Make sure your desktop environment supports global shortcuts"
