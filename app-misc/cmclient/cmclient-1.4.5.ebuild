@@ -24,6 +24,13 @@ RDEPEND="
 	media-libs/mesa
 	x11-libs/libdrm
 	x11-libs/libxkbcommon
+	x11-libs/libXcomposite
+	x11-libs/libXdamage
+	x11-libs/libXrandr
+	x11-libs/libXss
+	x11-libs/libXtst
+	dev-libs/libxcb
+	x11-libs/libxcb
 "
 
 DEPEND="${RDEPEND}"
@@ -41,13 +48,24 @@ src_install() {
 	insinto /opt/CMCLIENT
 	doins -r opt/CMCLIENT/* || die "Failed to install files to /opt/CMCLIENT"
 
-	# Set executable permission
+	# Set executable permission for all binaries in the directory
+	find "${D}/opt/CMCLIENT" -type f -executable -exec chmod +x {} \; 2>/dev/null || true
 	fperms +x /opt/CMCLIENT/cmlauncher
 
 	# Create main wrapper script with GPU stall fixes
 	exeinto /usr/bin
 	newexe - cmclient <<'EOF'
-#!/bin/sh
+#!/bin/bash
+set -e
+
+# Debug function
+debug_log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >&2
+}
+
+debug_log "Starting CMClient launcher..."
+
+# Create required directories
 mkdir -p "${HOME}/.local/share/.minecraft/cmclient"
 mkdir -p "${HOME}/.config/cmclient"
 
@@ -57,13 +75,28 @@ SHARED_JSON="${CONFIG_DIR}/shared.json"
 if [ ! -f "${SHARED_JSON}" ]; then
     echo '{}' > "${SHARED_JSON}"
     chmod 600 "${SHARED_JSON}"
+    debug_log "Created shared.json configuration file"
 fi
 
 # Kill any hung processes first
 pkill -f "cmclient|cmlauncher" 2>/dev/null || true
+sleep 1
+
+# Check if binary exists and is executable
+if [ ! -x "/opt/CMCLIENT/cmlauncher" ]; then
+    echo "ERROR: /opt/CMCLIENT/cmlauncher not found or not executable" >&2
+    exit 1
+fi
+
+# Check dependencies
+debug_log "Checking binary dependencies..."
+if ! ldd /opt/CMCLIENT/cmlauncher >/dev/null 2>&1; then
+    echo "ERROR: Missing dependencies for cmlauncher binary" >&2
+    echo "Run: ldd /opt/CMCLIENT/cmlauncher" >&2
+    exit 1
+fi
 
 # Advanced compatibility flags for AMD Cedar and old GPUs
-# These flags specifically address GPU stall issues with ReadPixels
 COMPATIBILITY_FLAGS="--no-sandbox --disable-gpu --disable-gpu-sandbox --disable-software-rasterizer --disable-dev-shm-usage"
 WEBGL_FIXES="--disable-webgl --disable-webgl2 --disable-accelerated-2d-canvas --disable-accelerated-video-decode --disable-accelerated-video-encode --disable-accelerated-mjpeg-decode"
 GPU_STALL_FIXES="--disable-gpu-rasterization --disable-partial-raster --disable-gl-drawing-for-tests"
@@ -72,19 +105,34 @@ PERFORMANCE_FLAGS="--disable-background-timer-throttling --disable-backgrounding
 # Display server detection
 if [ -n "$WAYLAND_DISPLAY" ]; then
     DISPLAY_FLAGS="--enable-features=UseOzonePlatform --ozone-platform=wayland --enable-wayland-ime"
+    debug_log "Using Wayland display server"
 elif [ -n "$DISPLAY" ]; then
     DISPLAY_FLAGS="--enable-features=UseOzonePlatform --ozone-platform=x11"
+    debug_log "Using X11 display server"
 else
     DISPLAY_FLAGS=""
+    debug_log "No display server detected"
 fi
 
-exec /opt/CMCLIENT/cmlauncher $COMPATIBILITY_FLAGS $WEBGL_FIXES $GPU_STALL_FIXES $PERFORMANCE_FLAGS $DISPLAY_FLAGS "$@"
+debug_log "Launching CMClient with compatibility flags..."
+
+# Set library path to ensure all dependencies are found
+export LD_LIBRARY_PATH="/opt/CMCLIENT:${LD_LIBRARY_PATH}"
+
+# Execute with error handling
+exec /opt/CMCLIENT/cmlauncher $COMPATIBILITY_FLAGS $WEBGL_FIXES $GPU_STALL_FIXES $PERFORMANCE_FLAGS $DISPLAY_FLAGS "$@" 2>&1 || {
+    echo "ERROR: CMClient launcher failed to start" >&2
+    echo "Try running 'cmclient-debug' for more information" >&2
+    exit 1
+}
 EOF
 
 	# Enhanced debug launcher with verbose logging
 	exeinto /usr/bin
 	newexe - cmclient-debug <<'EOF'
-#!/bin/sh
+#!/bin/bash
+set -e
+
 echo "=== CMClient Debug Mode ==="
 echo "System Information:"
 echo "  OS: $(uname -sr)"
@@ -105,6 +153,33 @@ for java_cmd in java /usr/lib/jvm/*/bin/java; do
 done
 echo ""
 
+# Check CMClient binary
+echo "CMClient Binary Information:"
+if [ -f "/opt/CMCLIENT/cmlauncher" ]; then
+    echo "  Binary exists: YES"
+    if [ -x "/opt/CMCLIENT/cmlauncher" ]; then
+        echo "  Executable: YES"
+    else
+        echo "  Executable: NO - This is the problem!"
+        echo "  Run: sudo chmod +x /opt/CMCLIENT/cmlauncher"
+        exit 1
+    fi
+    echo "  File info: $(ls -la /opt/CMCLIENT/cmlauncher)"
+else
+    echo "  Binary exists: NO - CMClient not properly installed!"
+    exit 1
+fi
+
+echo ""
+echo "Dependency Check:"
+if ldd /opt/CMCLIENT/cmlauncher 2>/dev/null | grep "not found"; then
+    echo "  Status: MISSING DEPENDENCIES - Install missing libraries above"
+    exit 1
+else
+    echo "  Status: All dependencies found"
+fi
+
+echo ""
 mkdir -p "${HOME}/.local/share/.minecraft/cmclient"
 mkdir -p "${HOME}/.config/cmclient"
 
@@ -120,7 +195,12 @@ pkill -f "cmclient|cmlauncher" 2>/dev/null || true
 sleep 1
 
 echo "Launching with debug flags..."
-exec /opt/CMCLIENT/cmlauncher \
+echo "Command: /opt/CMCLIENT/cmlauncher --no-sandbox --disable-gpu --disable-webgl --enable-logging --log-level=0 --v=2"
+echo ""
+
+export LD_LIBRARY_PATH="/opt/CMCLIENT:${LD_LIBRARY_PATH}"
+
+/opt/CMCLIENT/cmlauncher \
 	--no-sandbox \
 	--disable-gpu \
 	--disable-webgl \
@@ -130,14 +210,32 @@ exec /opt/CMCLIENT/cmlauncher \
 	--enable-logging \
 	--log-level=0 \
 	--v=2 \
-	"$@"
+	"$@" || {
+	echo ""
+	echo "ERROR: CMClient failed to start!"
+	echo "Exit code: $?"
+	echo ""
+	echo "Common solutions:"
+	echo "1. Check file permissions: ls -la /opt/CMCLIENT/cmlauncher"
+	echo "2. Check dependencies: ldd /opt/CMCLIENT/cmlauncher"
+	echo "3. Try minimal mode: cmclient-minimal"
+	echo "4. Reset configuration: cmclient-reset"
+	exit 1
+}
 EOF
 
 	# Ultra-minimal launcher for severe compatibility issues
 	exeinto /usr/bin
 	newexe - cmclient-minimal <<'EOF'
-#!/bin/sh
+#!/bin/bash
 echo "CMClient Minimal Mode - Maximum compatibility for problematic systems"
+
+# Check if binary exists first
+if [ ! -x "/opt/CMCLIENT/cmlauncher" ]; then
+    echo "ERROR: /opt/CMCLIENT/cmlauncher not found or not executable"
+    echo "Run: sudo chmod +x /opt/CMCLIENT/cmlauncher"
+    exit 1
+fi
 
 mkdir -p "${HOME}/.local/share/.minecraft/cmclient"
 mkdir -p "${HOME}/.config/cmclient"
@@ -154,6 +252,8 @@ pkill -f "cmclient|cmlauncher" 2>/dev/null || true
 sleep 2
 
 echo "Using absolute minimal flags..."
+export LD_LIBRARY_PATH="/opt/CMCLIENT:${LD_LIBRARY_PATH}"
+
 exec /opt/CMCLIENT/cmlauncher \
 	--no-sandbox \
 	--disable-gpu \
@@ -168,9 +268,14 @@ EOF
 	# GPU acceleration test launcher
 	exeinto /usr/bin
 	newexe - cmclient-gpu-test <<'EOF'
-#!/bin/sh
+#!/bin/bash
 echo "CMClient GPU Test Mode - Attempting hardware acceleration"
 echo "WARNING: This may cause GPU stalls on older hardware"
+
+if [ ! -x "/opt/CMCLIENT/cmlauncher" ]; then
+    echo "ERROR: /opt/CMCLIENT/cmlauncher not found or not executable"
+    exit 1
+fi
 
 mkdir -p "${HOME}/.local/share/.minecraft/cmclient"
 mkdir -p "${HOME}/.config/cmclient"
@@ -194,6 +299,8 @@ else
 fi
 
 echo "Testing with GPU acceleration enabled..."
+export LD_LIBRARY_PATH="/opt/CMCLIENT:${LD_LIBRARY_PATH}"
+
 exec /opt/CMCLIENT/cmlauncher \
 	--no-sandbox \
 	--ignore-gpu-blacklist \
@@ -207,7 +314,7 @@ EOF
 	# Configuration reset utility
 	exeinto /usr/bin
 	newexe - cmclient-reset <<'EOF'
-#!/bin/sh
+#!/bin/bash
 echo "CMClient Configuration Reset Utility"
 echo "This will delete all CMClient settings and cached data."
 echo ""
@@ -238,20 +345,24 @@ case $confirm in
 esac
 EOF
 
-	# Install icons
+	# Install icons with proper error handling
 	local iconpath="${WORKDIR}/usr/share/icons/hicolor"
-	for size in 16 22 24 32 48 64 96 128 256; do
-		local src_icon="${iconpath}/${size}x${size}/apps/cmlauncher.png"
-		if [[ -f "${src_icon}" ]]; then
-			insinto /usr/share/icons/hicolor/${size}x${size}/apps
-			newins "${src_icon}" cmclient.png
-		fi
-	done
+	if [[ -d "${iconpath}" ]]; then
+		for size in 16 22 24 32 48 64 96 128 256; do
+			local src_icon="${iconpath}/${size}x${size}/apps/cmlauncher.png"
+			if [[ -f "${src_icon}" ]]; then
+				insinto /usr/share/icons/hicolor/${size}x${size}/apps
+				newins "${src_icon}" cmclient.png
+			fi
+		done
 
-	# Fallback icon for pixmaps
-	if [[ -f "${iconpath}/256x256/apps/cmlauncher.png" ]]; then
-		insinto /usr/share/pixmaps
-		newins "${iconpath}/256x256/apps/cmlauncher.png" cmclient.png
+		# Fallback icon for pixmaps
+		if [[ -f "${iconpath}/256x256/apps/cmlauncher.png" ]]; then
+			insinto /usr/share/pixmaps
+			newins "${iconpath}/256x256/apps/cmlauncher.png" cmclient.png
+		fi
+	else
+		ewarn "Icon directory not found in package"
 	fi
 
 	# Create desktop entry
@@ -273,26 +384,44 @@ EOF
 
 pkg_postinst() {
 	xdg_icon_cache_update
+	
+	# Check if installation was successful
+	if [[ ! -f "${EROOT}/opt/CMCLIENT/cmlauncher" ]]; then
+		eerror "CMClient binary not found after installation!"
+		eerror "This indicates a problem with the package extraction."
+		return 1
+	fi
+	
+	if [[ ! -x "${EROOT}/opt/CMCLIENT/cmlauncher" ]]; then
+		ewarn "Setting executable permissions on CMClient binary..."
+		chmod +x "${EROOT}/opt/CMCLIENT/cmlauncher"
+	fi
+	
 	elog "CMClient has been successfully installed with GPU compatibility fixes!"
 	elog ""
 	elog "Available launchers:"
 	elog "  cmclient              - Main launcher (GPU stall fixes applied)"
-	elog "  cmclient-debug        - Debug mode with verbose logging"
+	elog "  cmclient-debug        - Debug mode with verbose logging and diagnostics"
 	elog "  cmclient-minimal      - Ultra-minimal for severe compatibility issues"
 	elog "  cmclient-gpu-test     - Test hardware acceleration (may cause issues)"
 	elog "  cmclient-reset        - Reset all configuration and cached data"
+	elog ""
+	elog "First run recommendation:"
+	elog "  Run 'cmclient-debug' first to verify installation and dependencies"
 	elog ""
 	elog "Configuration files:"
 	elog "  ~/.local/share/.minecraft/cmclient/shared.json"
 	elog "  ~/.config/cmclient/"
 	elog ""
 	elog "Troubleshooting guide:"
-	elog "1. If CMClient loads indefinitely or shows GPU stalls:"
+	elog "1. If CMClient terminates immediately:"
+	elog "   → Run: cmclient-debug (shows detailed diagnostics)"
+	elog "   → Check: sudo chmod +x /opt/CMCLIENT/cmlauncher"
+	elog "   → Check: ldd /opt/CMCLIENT/cmlauncher"
+	elog ""
+	elog "2. If CMClient loads indefinitely or shows GPU stalls:"
 	elog "   → The main launcher now includes fixes for this issue"
 	elog "   → If problems persist, try: cmclient-minimal"
-	elog ""
-	elog "2. If you need detailed error information:"
-	elog "   → Use: cmclient-debug"
 	elog ""
 	elog "3. If settings become corrupted:"
 	elog "   → Use: cmclient-reset"
@@ -308,6 +437,7 @@ pkg_postinst() {
 	elog "  ✓ Optimized for AMD Cedar series (Radeon HD 5000/6000/7000/8000)"
 	elog "  ✓ Works with software rendering"
 	elog "  ✓ Wayland and X11 support"
+	elog "  ✓ Enhanced error reporting and diagnostics"
 	elog ""
 	elog "For more information visit: https://cm-pack.pl/download"
 }
