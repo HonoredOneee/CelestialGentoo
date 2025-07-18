@@ -3,8 +3,6 @@
 
 EAPI=8
 
-inherit desktop xdg-utils
-
 DESCRIPTION="WO Mic Client (AppImage - terminal only)"
 HOMEPAGE="https://wolicheng.com/womic/wo_mic_linux.html"
 SRC_URI="https://github.com/HonoredOneee/CelestialGentoo/releases/download/v${PV}/micclient-x86_64.AppImage"
@@ -29,33 +27,16 @@ src_unpack() {
 }
 
 src_install() {
-	# Instalar o AppImage em /opt/womic
+	# Instala o AppImage em /opt/womic
 	insinto /opt/womic
 	doins "${DISTDIR}/micclient-x86_64.AppImage"
 	fperms +x /opt/womic/micclient-x86_64.AppImage
 
-	# Criar atalho global em /usr/bin
+	# Cria atalho global em /usr/bin
 	dosym /opt/womic/micclient-x86_64.AppImage /usr/bin/womic
-
-	# Criar arquivo .desktop para integração no menu
-	insinto /usr/share/applications
-	cat > "${D}/usr/share/applications/womic.desktop" <<EOF
-[Desktop Entry]
-Name=WO Mic
-Comment=Use phone as microphone
-GenericName=Wireless Microphone
-Exec=womic
-Icon=audio-input-microphone
-Terminal=false
-Type=Application
-Categories=AudioVideo;Audio;Network;
-StartupNotify=true
-Keywords=microphone;audio;wireless;phone;
-EOF
 }
 
 pkg_postinst() {
-	xdg_desktop_database_update
 	elog "WO Mic foi instalado com sucesso!"
 	elog ""
 	elog "Para usar o WO Mic:"
@@ -64,8 +45,4 @@ pkg_postinst() {
 	elog "  3. Configure a conexão (WiFi, USB ou Bluetooth)"
 	elog ""
 	elog "Documentação: https://wolicheng.com/womic/wo_mic_linux.html"
-}
-
-pkg_postrm() {
-	xdg_desktop_database_update
 }
