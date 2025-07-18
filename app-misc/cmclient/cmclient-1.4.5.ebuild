@@ -33,32 +33,32 @@ src_unpack() {
 }
 
 src_install() {
-	# Instalar arquivos do app, copiando para o diretório correto
+	# Instalar os arquivos do aplicativo
 	insinto /opt/CMCLIENT
-	doins -r opt/CMCLIENT/* || die "Falha ao copiar arquivos para /opt/CMCLIENT"
+	doins -r opt/CMCLIENT/* || die "Falha ao instalar arquivos em /opt/CMCLIENT"
 
-	# Ajustar permissões do executável
+	# Permissão de execução
 	fperms +x /opt/CMCLIENT/cmlauncher
 
-	# Criar wrapper script no /usr/bin para facilitar execução
+	# Criar wrapper em /usr/bin
 	exeinto /usr/bin
-	newexe - cmclient <<EOF
+	newexe - cmclient <<'EOF'
 #!/bin/sh
-mkdir -p "\${HOME}/.local/share/.minecraft/cmclient"
-mkdir -p "\${HOME}/.config/cmclient"
+mkdir -p "${HOME}/.local/share/.minecraft/cmclient"
+mkdir -p "${HOME}/.config/cmclient"
 
-CONFIG_DIR="\${HOME}/.local/share/.minecraft/cmclient"
-SHARED_JSON="\${CONFIG_DIR}/shared.json"
+CONFIG_DIR="${HOME}/.local/share/.minecraft/cmclient"
+SHARED_JSON="${CONFIG_DIR}/shared.json"
 
-if [ ! -f "\${SHARED_JSON}" ]; then
-    echo '{}' > "\${SHARED_JSON}"
-    chmod 600 "\${SHARED_JSON}"
+if [ ! -f "${SHARED_JSON}" ]; then
+    echo '{}' > "${SHARED_JSON}"
+    chmod 600 "${SHARED_JSON}"
 fi
 
-exec /opt/CMCLIENT/cmlauncher "\$@"
+exec /opt/CMCLIENT/cmlauncher "$@"
 EOF
 
-	# Instalar ícones nas resoluções padrão
+	# Ícones
 	local iconpath="${WORKDIR}/usr/share/icons/hicolor"
 	for size in 16 22 24 32 48 64 96 128 256; do
 		local src_icon="${iconpath}/${size}x${size}/apps/cmlauncher.png"
@@ -68,13 +68,13 @@ EOF
 		fi
 	done
 
-	# Instalar fallback para pixmaps
+	# Fallback para pixmaps
 	if [[ -f "${iconpath}/256x256/apps/cmlauncher.png" ]]; then
 		insinto /usr/share/pixmaps
 		newins "${iconpath}/256x256/apps/cmlauncher.png" cmclient.png
 	fi
 
-	# Criar arquivo .desktop para integração no menu
+	# Arquivo .desktop
 	insinto /usr/share/applications
 	cat > "${D}/usr/share/applications/cmclient.desktop" <<EOF
 [Desktop Entry]
@@ -95,12 +95,16 @@ EOF
 
 pkg_postinst() {
 	xdg_icon_cache_update
-	elog "O CMClient foi instalado com sucesso!"
-	elog "Configurações armazenadas em:"
+	elog "CMClient foi instalado com sucesso!"
+	elog ""
+	elog "Configurações salvas em:"
 	elog "  ~/.local/share/.minecraft/cmclient/shared.json"
 	elog ""
-	elog "Se o ícone não aparecer, tente reiniciar sua sessão ou rodar:"
+	elog "Se o ícone não aparecer, tente:"
 	elog "  gtk-update-icon-cache /usr/share/icons/hicolor"
+	elog ""
+	elog "Documentação e downloads:"
+	elog "  https://cm-pack.pl/download"
 }
 
 pkg_postrm() {
