@@ -5,7 +5,7 @@ EAPI=8
 
 DESCRIPTION="OdinV4 - ferramenta de flash Samsung via terminal"
 HOMEPAGE="https://github.com/Adrilaw/OdinV4"
-SRC_URI="https://github.com/HonoredOneee/CelestialGentoo/releases/download/v${PV}/odin4"
+SRC_URI="https://github.com/Adrilaw/OdinV4/releases/download/v${PV}/odin4"
 
 LICENSE="all-rights-reserved"
 SLOT="0"

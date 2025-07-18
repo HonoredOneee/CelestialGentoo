@@ -5,7 +5,7 @@ EAPI=8
 
 DESCRIPTION="WO Mic Client (AppImage - terminal only)"
 HOMEPAGE="https://wolicheng.com/womic/wo_mic_linux.html"
-SRC_URI="https://github.com/HonoredOneee/CelestialGentoo/releases/download/v${PV}/micclient-x86_64.AppImage"
+SRC_URI="https://wolicheng.com/womic/softwares/micclient-x86_64.AppImage"
 
 LICENSE="all-rights-reserved"
 SLOT="0"
