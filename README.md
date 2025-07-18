@@ -7,15 +7,14 @@
 This repository contains ebuilds for software that's only available in other package formats, bringing them to Gentoo users:
 
 **Featured Packages:**
-- **cmclient** - Connection Manager client (originally DEB-only)
+- **cmclient** - Minecraft launcher (originally DEB-only)
 - **womic** - Wireless microphone application (originally AppImage-only)
 
 **Categories:**
-- Network management tools and utilities
+- Gaming applications and launchers
 - Audio/multimedia applications and drivers
 - System administration tools
 - Development utilities and frameworks
-- Gaming-related packages and optimizations
 - Software converted from DEB, RPM, and AppImage formats
 - Latest upstream versions not yet in the official Gentoo tree
 
@@ -30,7 +29,7 @@ sudo emerge --sync celestialgentoo
 
 **Install featured packages:**
 ```bash
-# Connection Manager client
+# Minecraft launcher
 sudo emerge cmclient
 
 # Wireless microphone application
