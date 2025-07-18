@@ -52,6 +52,82 @@ EOF
 		chmod +x bin/gufw-pkexec || die
 	fi
 	
+	# Create app_profiles directory if it doesn't exist in the source
+	if [[ ! -d data/app_profiles ]]; then
+		mkdir -p data/app_profiles || die
+		
+		# Create some basic app profile files
+		cat > data/app_profiles/apache.profile << 'EOF'
+[Apache]
+ports=80/tcp,443/tcp
+title=Apache Web Server
+description=Apache HTTP Server - allows HTTP and HTTPS traffic
+EOF
+
+		cat > data/app_profiles/ssh.profile << 'EOF'
+[SSH]
+ports=22/tcp
+title=OpenSSH
+description=Secure Shell - allows SSH connections
+EOF
+
+		cat > data/app_profiles/ftp.profile << 'EOF'
+[FTP]
+ports=21/tcp
+title=FTP Server
+description=File Transfer Protocol server
+EOF
+
+		cat > data/app_profiles/dns.profile << 'EOF'
+[DNS]
+ports=53/tcp,53/udp
+title=DNS Server
+description=Domain Name System server
+EOF
+
+		cat > data/app_profiles/mail.profile << 'EOF'
+[Mail]
+ports=25/tcp,110/tcp,143/tcp,465/tcp,587/tcp,993/tcp,995/tcp
+title=Mail Server
+description=Email server (SMTP, POP3, IMAP)
+EOF
+
+		cat > data/app_profiles/samba.profile << 'EOF'
+[Samba]
+ports=137/udp,138/udp,139/tcp,445/tcp
+title=Samba
+description=SMB/CIFS file sharing
+EOF
+
+		cat > data/app_profiles/nfs.profile << 'EOF'
+[NFS]
+ports=111/tcp,111/udp,2049/tcp,2049/udp
+title=NFS
+description=Network File System
+EOF
+
+		cat > data/app_profiles/mysql.profile << 'EOF'
+[MySQL]
+ports=3306/tcp
+title=MySQL Database
+description=MySQL database server
+EOF
+
+		cat > data/app_profiles/postgresql.profile << 'EOF'
+[PostgreSQL]
+ports=5432/tcp
+title=PostgreSQL Database
+description=PostgreSQL database server
+EOF
+
+		cat > data/app_profiles/vnc.profile << 'EOF'
+[VNC]
+ports=5900/tcp
+title=VNC Server
+description=Virtual Network Computing remote desktop
+EOF
+	fi
+	
 	distutils-r1_python_prepare_all
 }
 
@@ -183,6 +259,16 @@ EOF
 		doins -r gufw
 	fi
 	
+	# CRITICAL: Install app_profiles directory to /etc/gufw/
+	# This is what was missing and causing the FileNotFoundError
+	if [[ -d data/app_profiles ]]; then
+		insinto /etc/gufw
+		doins -r data/app_profiles
+	fi
+	
+	# Create the main gufw config directory
+	keepdir /etc/gufw
+	
 	# Install desktop file
 	if [[ -f build/share/applications/gufw.desktop ]]; then
 		domenu build/share/applications/gufw.desktop
@@ -291,6 +377,11 @@ pkg_postinst() {
 	ewarn "• UFW MUST be enabled BEFORE using GUFW, or GUFW will show errors"
 	ewarn "• Always allow SSH access before enabling UFW on remote systems"
 	ewarn "• Test firewall rules carefully to avoid locking yourself out"
+	elog ""
+	elog "FIXED IN THIS VERSION:"
+	elog "• Added missing /etc/gufw/app_profiles directory"
+	elog "• Created basic application profiles for common services"
+	elog "• Fixed FileNotFoundError when starting GUFW"
 	elog ""
 	elog "TROUBLESHOOTING:"
 	elog "• If authentication fails: check if user is in 'wheel' group"
