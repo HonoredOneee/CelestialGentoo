@@ -52,23 +52,26 @@ src_prepare() {
 		-e "s|/usr/share/gufw|${EPREFIX}/usr/share/gufw|g" \
 		-e "s|/usr/bin/gufw|${EPREFIX}/usr/bin/gufw|g" \
 		bin/gufw-pkexec || die "sed failed for gufw-pkexec"
-}
 
-src_compile() {
-	# Compile translations
-	for po in po/*.po; do
-		lang=$(basename "${po}" .po)
-		mkdir -p "build/mo/${lang}/LC_MESSAGES" || die
-		msgfmt "${po}" -o "build/mo/${lang}/LC_MESSAGES/gufw.mo" || die
-	done
+	# Ensure UI directory exists
+	mkdir -p "${S}/ui" || die
 }
 
 src_install() {
 	python_domodule gufw
 
-	# Install UI files
-	insinto /usr/share/gufw/ui
-	doins ui/*.ui
+	# Install UI files - CORREÇÃO CRÍTICA
+	if [[ -d "${S}/gufw/view/ui" ]]; then
+		insinto /usr/share/gufw/ui
+		doins "${S}"/gufw/view/ui/*.ui
+	elif [[ -d "${S}/ui" ]]; then
+		insinto /usr/share/gufw/ui
+		doins "${S}"/ui/*.ui
+	else
+		ewarn "UI directory not found! Falling back to manual file copy"
+		insinto /usr/share/gufw/ui
+		newins "${S}"/gufw/view/gufw.ui gufw.ui
+	fi
 
 	# Create launcher script
 	cat > "${T}/gufw-launcher" <<-EOF || die
@@ -76,18 +79,23 @@ src_install() {
 	import sys
 	import os
 	import subprocess
-	import importlib.util
 
 	def main():
 	    print("GUFW Launcher - Starting...")
 	    try:
+	        # Try direct import first
 	        from gufw.gufw import main as gufw_main
 	        print("Found main module, starting GUFW")
 	        gufw_main()
 	    except ImportError as e:
 	        print(f"Import error: {e}")
 	        print("Attempting alternative startup method...")
-	        os.execlp("python3", "python3", "-m", "gufw")
+	        # Fallback to module execution
+	        try:
+	            subprocess.run([sys.executable, "-m", "gufw"], check=True)
+	        except subprocess.CalledProcessError as e:
+	            print(f"Failed to start GUFW: {e}")
+	            sys.exit(1)
 
 	if __name__ == '__main__':
 	    main()
@@ -97,25 +105,49 @@ src_install() {
 
 	# Install supporting files
 	dobin bin/gufw-pkexec
-	domenu data/gufw.desktop
+	
+	# Install desktop file - verifica múltiplas localizações
+	if [[ -f data/gufw.desktop ]]; then
+		domenu data/gufw.desktop
+	elif [[ -f gufw.desktop ]]; then
+		domenu gufw.desktop
+	elif [[ -f setup.py ]]; then
+		# Extrai do setup.py se necessário
+		sed -n '/Desktop Entry/,/^$/p' setup.py > "${T}/gufw.desktop"
+		domenu "${T}/gufw.desktop"
+	fi
 
-	# Install icons
-	for size in 16 22 24 32 48 64 128 256; do
-		newicon -s ${size} "data/icons/gufw_${size}.png" gufw.png
-	done
-	newicon -s scalable data/icons/gufw.svg gufw.svg
+	# Install icons - com verificações
+	if [[ -d data/icons ]]; then
+		for size in 16 22 24 32 48 64 128 256; do
+			if [[ -f "data/icons/gufw_${size}.png" ]]; then
+				newicon -s ${size} "data/icons/gufw_${size}.png" gufw.png
+			fi
+		done
+		if [[ -f data/icons/gufw.svg ]]; then
+			newicon -s scalable data/icons/gufw.svg gufw.svg
+		fi
+	fi
 
-	# Install translations
-	insinto /usr/share/locale
-	doins -r build/mo/*
+	# Install translations se existirem
+	if [[ -d build/mo ]]; then
+		insinto /usr/share/locale
+		doins -r build/mo/*
+	else
+		ewarn "Translation files not found, skipping"
+	fi
 
 	# Install policy file
-	insinto /usr/share/polkit-1/actions
-	doins data/gufw.policy
+	if [[ -f data/gufw.policy ]]; then
+		insinto /usr/share/polkit-1/actions
+		doins data/gufw.policy
+	fi
 
 	# Install documentation
-	doman data/gufw.1
-	dodoc README*
+	if [[ -f data/gufw.1 ]]; then
+		doman data/gufw.1
+	fi
+	dodoc README* CONTRIBUTING* CHANGELOG*
 }
 
 pkg_postinst() {
@@ -133,6 +165,14 @@ pkg_postinst() {
 	elog "   # ufw status verbose"
 	elog ""
 	elog "Note: Ensure your user is in the 'wheel' group for authentication."
+	elog ""
+	elog "If you encounter issues:"
+	elog "1. Verify UI files are installed:"
+	elog "   ls /usr/share/gufw/ui/"
+	elog "2. Check launcher script:"
+	elog "   cat /usr/bin/gufw"
+	elog "3. Test direct launch:"
+	elog "   python -m gufw"
 }
 
 pkg_postrm() {
