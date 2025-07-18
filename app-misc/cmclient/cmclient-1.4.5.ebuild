@@ -24,8 +24,6 @@ RDEPEND="
 	media-libs/mesa
 	x11-libs/libdrm
 	x11-libs/libxkbcommon
-	x11-libs/libxss
-	x11-libs/libxtst
 "
 
 DEPEND="${RDEPEND}"
