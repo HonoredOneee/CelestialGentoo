@@ -58,12 +58,18 @@ src_prepare() {
 }
 
 src_compile() {
-	# Compile translations
-	for po in po/*.po; do
-		lang=$(basename "$po" .po)
-		mkdir -p "build/mo/$lang/LC_MESSAGES" || die
-		msgfmt "$po" -o "build/mo/$lang/LC_MESSAGES/gufw.mo" || die
-	done
+	# Compile translations (if po directory exists)
+	if [[ -d po ]]; then
+		for po in po/*.po; do
+			if [[ -f "$po" ]]; then
+				lang=$(basename "$po" .po)
+				mkdir -p "build/mo/$lang/LC_MESSAGES" || die
+				msgfmt "$po" -o "build/mo/$lang/LC_MESSAGES/gufw.mo" || die
+			fi
+		done
+	else
+		einfo "No po directory found, skipping translation compilation"
+	fi
 }
 
 src_install() {
@@ -73,31 +79,65 @@ src_install() {
 	dobin bin/gufw
 	dobin bin/gufw-pkexec
 
-	# Install desktop file
-	domenu data/gufw.desktop
+	# Install desktop file (check if it exists first)
+	if [[ -f data/gufw.desktop ]]; then
+		domenu data/gufw.desktop
+	elif [[ -f gufw.desktop ]]; then
+		domenu gufw.desktop
+	else
+		einfo "Desktop file not found, skipping"
+	fi
 
-	# Install icons
-	local size
-	for size in 16 22 24 32 48 64 128 256; do
-		newicon -s ${size} data/icons/gufw_${size}.png gufw.png
-	done
+	# Install icons (check if directory exists)
+	if [[ -d data/icons ]]; then
+		local size
+		for size in 16 22 24 32 48 64 128 256; do
+			if [[ -f data/icons/gufw_${size}.png ]]; then
+				newicon -s ${size} data/icons/gufw_${size}.png gufw.png
+			fi
+		done
+		
+		# Install scalable icon
+		if [[ -f data/icons/gufw.svg ]]; then
+			newicon -s scalable data/icons/gufw.svg gufw.svg
+		fi
+	else
+		einfo "Icons directory not found, skipping icons"
+	fi
 
-	# Install scalable icon
-	newicon -s scalable data/icons/gufw.svg gufw.svg
+	# Install translations (check if built)
+	if [[ -d build/mo ]]; then
+		insinto /usr/share/locale
+		doins -r build/mo/*
+	else
+		einfo "No translations built, skipping"
+	fi
 
-	# Install translations
-	insinto /usr/share/locale
-	doins -r build/mo/*
+	# Install polkit policy (check if it exists)
+	if [[ -f data/gufw.policy ]]; then
+		insinto /usr/share/polkit-1/actions
+		doins data/gufw.policy
+	else
+		einfo "Polkit policy not found, skipping"
+	fi
 
-	# Install polkit policy
-	insinto /usr/share/polkit-1/actions
-	doins data/gufw.policy
+	# Install man page (check if it exists)
+	if [[ -f data/gufw.1 ]]; then
+		doman data/gufw.1
+	elif [[ -f gufw.1 ]]; then
+		doman gufw.1
+	else
+		einfo "Man page not found, skipping"
+	fi
 
-	# Install man page
-	doman data/gufw.1
-
-	# Install documentation
-	dodoc README.md
+	# Install documentation (check if it exists)
+	if [[ -f README.md ]]; then
+		dodoc README.md
+	elif [[ -f README ]]; then
+		dodoc README
+	else
+		einfo "README not found, skipping"
+	fi
 }
 
 pkg_postinst() {
