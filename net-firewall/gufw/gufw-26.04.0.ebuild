@@ -87,22 +87,76 @@ import subprocess
 
 def main():
     """Main launcher for GUFW"""
+    
+    # Method 1: Try to import and run gufw.gufw directly
     try:
-        # Try to import and run gufw directly
         from gufw.gufw import main as gufw_main
         gufw_main()
+        return
     except ImportError:
-        try:
-            # Alternative: try to run as module
-            subprocess.run([sys.executable, '-m', 'gufw'])
-        except Exception:
-            # Final fallback: try to run the main script directly
-            script_path = '/usr/share/gufw/gufw/gufw.py'
-            if os.path.exists(script_path):
-                subprocess.run([sys.executable, script_path])
-            else:
-                print("Error: Could not find GUFW main script")
-                sys.exit(1)
+        pass
+    except Exception as e:
+        print(f"Error running gufw.gufw.main(): {e}")
+    
+    # Method 2: Try to run the main script directly
+    script_paths = [
+        '/usr/share/gufw/gufw/gufw.py',
+        '/usr/share/gufw/gufw.py',
+        '/usr/lib/python*/site-packages/gufw/gufw.py'
+    ]
+    
+    for script_path in script_paths:
+        if os.path.exists(script_path):
+            try:
+                subprocess.run([sys.executable, script_path] + sys.argv[1:])
+                return
+            except Exception as e:
+                print(f"Error running {script_path}: {e}")
+                continue
+    
+    # Method 3: Try to find gufw.py in the installed package
+    try:
+        import gufw
+        gufw_dir = os.path.dirname(gufw.__file__)
+        gufw_script = os.path.join(gufw_dir, 'gufw.py')
+        if os.path.exists(gufw_script):
+            subprocess.run([sys.executable, gufw_script] + sys.argv[1:])
+            return
+    except ImportError:
+        pass
+    except Exception as e:
+        print(f"Error finding gufw package: {e}")
+    
+    # Method 4: Try to run any main function in the gufw module
+    try:
+        import gufw
+        # Look for main functions
+        for attr in ['main', 'run', 'start', 'app_main']:
+            if hasattr(gufw, attr):
+                getattr(gufw, attr)()
+                return
+    except ImportError:
+        pass
+    except Exception as e:
+        print(f"Error running gufw module function: {e}")
+    
+    print("Error: Could not find or run GUFW. Please check installation.")
+    print("Available methods:")
+    print("1. Direct script execution")
+    print("2. Module import")
+    print("3. Package execution")
+    
+    # Debug information
+    try:
+        import gufw
+        print(f"GUFW module found at: {gufw.__file__}")
+        print(f"GUFW module contents: {dir(gufw)}")
+        gufw_dir = os.path.dirname(gufw.__file__)
+        print(f"Files in gufw directory: {os.listdir(gufw_dir)}")
+    except ImportError:
+        print("GUFW module not found in Python path")
+    
+    sys.exit(1)
 
 if __name__ == '__main__':
     main()
