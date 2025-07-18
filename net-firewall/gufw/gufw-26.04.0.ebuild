@@ -79,41 +79,174 @@ src_install() {
 		python_domodule gufw
 	fi
 
-	# Create a proper Python launcher script
-	cat > "${T}/gufw-launcher" << EOF
+	# Create a comprehensive Python launcher script
+	cat > "${T}/gufw-launcher" << 'EOF'
 #!/usr/bin/env python3
 import sys
 import os
+import subprocess
+import importlib.util
 
-# Try to import and run gufw
-try:
-    from gufw.gufw import main
-    if __name__ == '__main__':
-        main()
-except ImportError as e:
-    print(f"Error importing gufw: {e}")
-    print("Trying alternative import methods...")
+def find_gufw_main():
+    """Try multiple methods to find and run gufw main function"""
     
-    # Try different import paths
+    # Method 1: Try standard gufw.gufw import
+    try:
+        from gufw.gufw import main
+        return main
+    except ImportError:
+        pass
+    except AttributeError:
+        pass
+    
+    # Method 2: Try gufw.main import
+    try:
+        from gufw import main
+        return main
+    except ImportError:
+        pass
+    except AttributeError:
+        pass
+    
+    # Method 3: Try importing gufw module and look for main
     try:
         import gufw
         if hasattr(gufw, 'main'):
-            gufw.main()
-        else:
-            print("gufw module found but no main function")
-            sys.exit(1)
+            return gufw.main
+        
+        # Check if there's a gufw submodule
+        if hasattr(gufw, 'gufw') and hasattr(gufw.gufw, 'main'):
+            return gufw.gufw.main
+            
+        # Look for other possible main functions
+        for attr_name in ['run', 'start', 'app_main', 'gui_main']:
+            if hasattr(gufw, attr_name):
+                return getattr(gufw, attr_name)
+        
+        # Check in submodules
+        for submodule in ['app', 'main', 'gui', 'core']:
+            try:
+                submod = getattr(gufw, submodule, None)
+                if submod and hasattr(submod, 'main'):
+                    return submod.main
+            except:
+                continue
+                
     except ImportError:
+        pass
+    
+    # Method 4: Try to find main in gufw/__init__.py
+    try:
+        import gufw
+        gufw_path = gufw.__file__
+        if gufw_path.endswith('__init__.py'):
+            # Read the __init__.py file and look for main function
+            with open(gufw_path, 'r') as f:
+                content = f.read()
+                if 'def main(' in content:
+                    # Try to execute the main function
+                    exec_globals = {}
+                    exec(content, exec_globals)
+                    if 'main' in exec_globals:
+                        return exec_globals['main']
+    except:
+        pass
+    
+    # Method 5: Try to run as a module
+    try:
+        result = subprocess.run([sys.executable, '-m', 'gufw'], 
+                              capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            # If running as module works, create a wrapper
+            def module_runner():
+                subprocess.run([sys.executable, '-m', 'gufw'])
+            return module_runner
+    except:
+        pass
+    
+    # Method 6: Look for executable files in the gufw directory
+    try:
+        import gufw
+        gufw_dir = os.path.dirname(gufw.__file__)
+        
+        # Look for common executable files
+        for filename in ['main.py', 'app.py', 'gui.py', 'gufw.py', 'run.py']:
+            filepath = os.path.join(gufw_dir, filename)
+            if os.path.exists(filepath):
+                def file_runner():
+                    subprocess.run([sys.executable, filepath])
+                return file_runner
+    except:
+        pass
+    
+    return None
+
+def main():
+    """Main launcher function"""
+    print("GUFW Launcher - Attempting to start GUFW...")
+    
+    # Try to find and run gufw
+    gufw_main = find_gufw_main()
+    
+    if gufw_main:
         try:
-            # Try to run as module
-            import subprocess
-            result = subprocess.run([sys.executable, '-m', 'gufw'], 
-                                  capture_output=True, text=True)
-            if result.returncode != 0:
-                print(f"Error running gufw module: {result.stderr}")
-                sys.exit(1)
+            print("Found GUFW main function, starting...")
+            gufw_main()
         except Exception as e:
-            print(f"Failed to run gufw: {e}")
-            sys.exit(1)
+            print(f"Error running GUFW: {e}")
+            print("Trying alternative startup method...")
+            
+            # Last resort: try to run any python file in gufw directory
+            try:
+                import gufw
+                gufw_dir = os.path.dirname(gufw.__file__)
+                
+                # Look for any .py file that might be the main entry point
+                for root, dirs, files in os.walk(gufw_dir):
+                    for file in files:
+                        if file.endswith('.py') and file != '__init__.py':
+                            filepath = os.path.join(root, file)
+                            try:
+                                # Try to execute the file
+                                with open(filepath, 'r') as f:
+                                    content = f.read()
+                                    if 'gtk' in content.lower() or 'main' in content.lower():
+                                        print(f"Trying to run {filepath}...")
+                                        subprocess.run([sys.executable, filepath])
+                                        return
+                            except:
+                                continue
+                
+                print("Could not find a suitable entry point for GUFW")
+                sys.exit(1)
+                
+            except Exception as e2:
+                print(f"Final attempt failed: {e2}")
+                sys.exit(1)
+    else:
+        print("Could not find GUFW main function")
+        print("Available methods in gufw module:")
+        
+        try:
+            import gufw
+            print("gufw module contents:", dir(gufw))
+            
+            # Check if there's a __main__.py
+            gufw_dir = os.path.dirname(gufw.__file__)
+            main_py = os.path.join(gufw_dir, '__main__.py')
+            if os.path.exists(main_py):
+                print("Found __main__.py, trying to run it...")
+                subprocess.run([sys.executable, main_py])
+                return
+                
+        except Exception as e:
+            print(f"Error inspecting gufw module: {e}")
+        
+        print("Please check if GUFW is properly installed")
+        sys.exit(1)
+
+if __name__ == '__main__':
+    main()
 EOF
 
 	# Install the launcher script
@@ -222,6 +355,7 @@ pkg_postinst() {
 	elog "• If authentication fails: check if user is in 'wheel' group"
 	elog "• If UFW commands fail: verify UFW is installed and service is running"
 	elog "• For remote servers: ALWAYS allow SSH before enabling UFW!"
+	elog "• If GUFW won't start: try running 'gufw' in terminal to see errors"
 	elog ""
 	elog "DOCUMENTATION:"
 	elog "• GUFW: https://gufw.org/"
