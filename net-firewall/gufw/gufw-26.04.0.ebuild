@@ -37,10 +37,24 @@ BDEPEND="
 S="${WORKDIR}/gui-ufw-${PV}"
 
 python_prepare_all() {
-	# Fix desktop file categories
-	if [[ -f data/gufw.desktop.in ]]; then
-		sed -i 's/Categories=.*/Categories=System;Security;/' data/gufw.desktop.in || die
-	fi
+	# Create custom desktop file that runs with pkexec
+	cat > data/gufw.desktop << 'EOF'
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Firewall Configuration
+Name[pt_BR]=Configuração do Firewall
+Comment=Configure the built-in firewall
+Comment[pt_BR]=Configure o firewall integrado
+GenericName=Firewall Configuration
+GenericName[pt_BR]=Configuração do Firewall
+Icon=gufw
+Exec=pkexec gufw
+Terminal=false
+StartupNotify=true
+Categories=System;Security;
+Keywords=firewall;security;ufw;iptables;network;
+EOF
 	
 	# Fix pkexec script - this is critical for the syntax error
 	if [[ -f bin/gufw-pkexec ]]; then
@@ -154,7 +168,7 @@ python_compile_all() {
 python_install_all() {
 	distutils-r1_python_install_all
 	
-	# Create a proper launcher script
+	# Create a proper launcher script that works with pkexec
 	cat > "${T}/gufw-launcher" << 'EOF'
 #!/usr/bin/env python3
 import sys
@@ -162,7 +176,28 @@ import os
 import subprocess
 
 def main():
-    """Main launcher for GUFW"""
+    """Main launcher for GUFW with proper privilege handling"""
+    
+    # Check if we're running as root (via pkexec)
+    if os.geteuid() == 0:
+        # Running as root, proceed with GUFW
+        run_gufw()
+    else:
+        # Not running as root, try to run with pkexec
+        try:
+            # Try to run with pkexec
+            subprocess.run(['pkexec', sys.executable, __file__] + sys.argv[1:])
+            return
+        except FileNotFoundError:
+            print("Error: pkexec not found. Please install polkit.")
+            sys.exit(1)
+        except Exception as e:
+            print(f"Error running with pkexec: {e}")
+            print("Trying to run without elevated privileges...")
+            run_gufw()
+
+def run_gufw():
+    """Run GUFW using various methods"""
     
     # Method 1: Try to import and run gufw.gufw directly
     try:
@@ -269,12 +304,8 @@ EOF
 	# Create the main gufw config directory
 	keepdir /etc/gufw
 	
-	# Install desktop file
-	if [[ -f build/share/applications/gufw.desktop ]]; then
-		domenu build/share/applications/gufw.desktop
-	elif [[ -f data/gufw.desktop ]]; then
-		domenu data/gufw.desktop
-	fi
+	# Install desktop file (always use our custom one)
+	domenu data/gufw.desktop
 	
 	# Install icons
 	local size
@@ -291,14 +322,34 @@ EOF
 		newicon -s scalable data/icons/gufw.svg gufw.svg
 	fi
 	
-	# Install polkit policy
-	if [[ -f data/gufw.policy ]]; then
-		insinto /usr/share/polkit-1/actions
-		newins data/gufw.policy com.ubuntu.pkexec.gufw.policy
-	elif [[ -f build/share/polkit-1/actions/com.ubuntu.pkexec.gufw.policy ]]; then
-		insinto /usr/share/polkit-1/actions
-		doins build/share/polkit-1/actions/com.ubuntu.pkexec.gufw.policy
-	fi
+	# Install polkit policy file
+	cat > "${T}/com.ubuntu.pkexec.gufw.policy" << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>GUFW</vendor>
+  <vendor_url>https://gufw.org/</vendor_url>
+  <action id="com.ubuntu.pkexec.gufw">
+    <description>Run GUFW Firewall Configuration</description>
+    <description xml:lang="pt_BR">Executar Configuração do Firewall GUFW</description>
+    <message>Authentication is required to run GUFW</message>
+    <message xml:lang="pt_BR">Autenticação é necessária para executar o GUFW</message>
+    <icon_name>gufw</icon_name>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/gufw</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
+  </action>
+</policyconfig>
+EOF
+	
+	insinto /usr/share/polkit-1/actions
+	doins "${T}/com.ubuntu.pkexec.gufw.policy"
 	
 	# Install corrected pkexec script
 	if [[ -f bin/gufw-pkexec ]]; then
@@ -367,8 +418,12 @@ pkg_postinst() {
 	elog "   (if not running: sudo systemctl enable polkit && sudo systemctl start polkit)"
 	elog ""
 	elog "8. LAUNCH GUFW:"
-	elog "   gufw"
+	elog "   gufw (will automatically request administrator privileges)"
 	elog "   (or search for 'Firewall Configuration' in your application menu)"
+	elog ""
+	elog "9. DESKTOP INTEGRATION:"
+	elog "   The desktop file now automatically runs GUFW with pkexec"
+	elog "   You'll see an authentication dialog when clicking the icon"
 	elog ""
 	elog "═══════════════════════════════════════════════════════════════════"
 	elog "                         IMPORTANT NOTES"
@@ -382,6 +437,8 @@ pkg_postinst() {
 	elog "• Added missing /etc/gufw/app_profiles directory"
 	elog "• Created basic application profiles for common services"
 	elog "• Fixed FileNotFoundError when starting GUFW"
+	elog "• Desktop file now automatically runs with administrator privileges"
+	elog "• Added proper PolicyKit integration for GUI authentication"
 	elog ""
 	elog "TROUBLESHOOTING:"
 	elog "• If authentication fails: check if user is in 'wheel' group"
