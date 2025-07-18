@@ -42,6 +42,9 @@ sudo emerge odin4
 
 # GUI for UFW firewall
 sudo emerge gufw
+
+# A fast GUI autoclicker for Linux (X11)
+sudo emerge xclicker
 ```
 
 ## Contributing
