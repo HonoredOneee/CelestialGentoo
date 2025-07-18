@@ -10,12 +10,11 @@ inherit distutils-r1 desktop xdg
 
 DESCRIPTION="Uncomplicated Firewall GUI"
 HOMEPAGE="https://gufw.org/ https://github.com/costales/gufw"
-SRC_URI="https://github.com/HonoredOneee/CelestialGentoo/releases/download/v1.4.5/gui-ufw-${PV}.tar.gz"
+SRC_URI="https://github.com/costales/gufw/archive/refs/tags/${PV%.*}.tar.gz -> ${P}.tar.gz"
 
 LICENSE="GPL-3"
 SLOT="0"
 KEYWORDS="~amd64"
-RESTRICT="mirror"
 
 RDEPEND="
 	${PYTHON_DEPS}
@@ -34,7 +33,7 @@ BDEPEND="
 	virtual/pkgconfig
 "
 
-S="${WORKDIR}/gui-ufw-${PV}"
+S="${WORKDIR}/${PN}-${PV%.*}"
 
 python_prepare_all() {
 	# Create custom desktop file that runs with pkexec
@@ -474,6 +473,7 @@ pkg_postinst() {
 	elog "• Fixed FileNotFoundError when starting GUFW"
 	elog "• Desktop file now automatically runs with administrator privileges"
 	elog "• Added proper PolicyKit integration for GUI authentication"
+	elog "• Now using official GUFW source repository"
 	elog ""
 	elog "TROUBLESHOOTING:"
 	elog "• If authentication fails: check if user is in 'wheel' group"
