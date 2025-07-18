@@ -38,7 +38,8 @@ BDEPEND="
 	virtual/pkgconfig
 	dev-vcs/git-lfs"
 
-S="${WORKDIR}/gufw-${PV}"
+# Fixed: Match the actual directory name from the tarball
+S="${WORKDIR}/gui-ufw-${PV}"
 
 src_prepare() {
 	default
