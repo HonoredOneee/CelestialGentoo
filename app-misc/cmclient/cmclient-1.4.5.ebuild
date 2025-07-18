@@ -21,7 +21,7 @@ RDEPEND="
 	app-accessibility/at-spi2-atk
 	x11-libs/gtk+:3
 	media-libs/alsa-lib
-	media-libs/mesa[gbm]
+	media-libs/mesa
 	x11-libs/libdrm
 	x11-libs/libxkbcommon
 	x11-libs/libxss
