@@ -5,7 +5,7 @@ EAPI=8
 
 DESCRIPTION="WO Mic Client (AppImage - terminal only)"
 HOMEPAGE="https://wolicheng.com/womic/wo_mic_linux.html"
-SRC_URI="micclient-x86_64.AppImage"
+SRC_URI="https://raw.githubusercontent.com/HonoredOneee/CelestialGentoo/main/distfiles/micclient-x86_64.AppImage"
 
 LICENSE="all-rights-reserved"
 SLOT="0"
@@ -13,6 +13,9 @@ KEYWORDS="~amd64"
 RESTRICT="mirror bindist strip"
 
 RDEPEND=""
+
+DEPEND="${RDEPEND}"
+BDEPEND="dev-vcs/git-lfs"
 
 S="${WORKDIR}"
 
