@@ -4,7 +4,7 @@
 EAPI=8
 
 PYTHON_COMPAT=( python3_{9..12} )
-PYTHON_REQ_USE="xml"
+# Corrigido: removido PYTHON_REQ_USE="xml"
 
 inherit python-single-r1 desktop xdg-utils
 
