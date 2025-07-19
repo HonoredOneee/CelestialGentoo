@@ -45,7 +45,7 @@ src_install() {
 	find "${D}/opt/CMCLIENT" -type f -executable -exec chmod +x {} \; 2>/dev/null || true
 	fperms +x /opt/CMCLIENT/cmlauncher
 
-	# Create main wrapper script
+	# Create main wrapper script (WITHOUT compatibility flags)
 	exeinto /usr/bin
 	newexe - cmclient <<'EOF'
 #!/bin/bash
@@ -73,10 +73,7 @@ if [ ! -x "/opt/CMCLIENT/cmlauncher" ]; then
     exit 1
 fi
 
-# Basic compatibility flags
-COMPATIBILITY_FLAGS="--no-sandbox --disable-gpu --disable-dev-shm-usage"
-
-# Display server detection
+# Display server detection (only display flags, no compatibility flags)
 if [ -n "$WAYLAND_DISPLAY" ]; then
     DISPLAY_FLAGS="--enable-features=UseOzonePlatform --ozone-platform=wayland"
 elif [ -n "$DISPLAY" ]; then
@@ -88,15 +85,15 @@ fi
 # Set library path to ensure all dependencies are found
 export LD_LIBRARY_PATH="/opt/CMCLIENT:${LD_LIBRARY_PATH}"
 
-# Execute with error handling
-exec /opt/CMCLIENT/cmlauncher $COMPATIBILITY_FLAGS $DISPLAY_FLAGS "$@" 2>&1 || {
+# Execute with error handling (NO COMPATIBILITY FLAGS)
+exec /opt/CMCLIENT/cmlauncher $DISPLAY_FLAGS "$@" 2>&1 || {
     echo "ERROR: CMClient launcher failed to start" >&2
     echo "Try running 'cmclient-debug' for more information" >&2
     exit 1
 }
 EOF
 
-	# Enhanced debug launcher
+	# Enhanced debug launcher (also without compatibility flags)
 	exeinto /usr/bin
 	newexe - cmclient-debug <<'EOF'
 #!/bin/bash
@@ -151,13 +148,11 @@ fi
 pkill -f "cmclient|cmlauncher" 2>/dev/null || true
 sleep 1
 
-echo "Launching with debug flags..."
+echo "Launching without compatibility flags (basic mode)..."
 export LD_LIBRARY_PATH="/opt/CMCLIENT:${LD_LIBRARY_PATH}"
 
+# Launch with minimal flags - no --no-sandbox, --disable-gpu, --disable-dev-shm-usage
 /opt/CMCLIENT/cmlauncher \
-	--no-sandbox \
-	--disable-gpu \
-	--disable-dev-shm-usage \
 	--enable-logging \
 	--log-level=0 \
 	--v=2 \
@@ -169,9 +164,7 @@ export LD_LIBRARY_PATH="/opt/CMCLIENT:${LD_LIBRARY_PATH}"
 }
 EOF
 
-
-
-	# Configuration reset utility
+	# Configuration reset utility (unchanged)
 	exeinto /usr/bin
 	newexe - cmclient-reset <<'EOF'
 #!/bin/bash
@@ -260,7 +253,7 @@ pkg_postinst() {
 	elog "CMClient has been successfully installed!"
 	elog ""
 	elog "Available launchers:"
-	elog "  cmclient              - Main launcher"
+	elog "  cmclient              - Main launcher (no compatibility flags)"
 	elog "  cmclient-debug        - Debug mode with diagnostics"
 	elog "  cmclient-reset        - Reset configuration"
 	elog ""
@@ -270,6 +263,9 @@ pkg_postinst() {
 	elog "Configuration files:"
 	elog "  ~/.local/share/.minecraft/cmclient/shared.json"
 	elog "  ~/.config/cmclient/"
+	elog ""
+	elog "NOTE: Compatibility flags removed - if you experience issues,"
+	elog "you may need to manually add specific flags based on your system."
 	elog ""
 	elog "Wayland and X11 support"
 	elog ""
