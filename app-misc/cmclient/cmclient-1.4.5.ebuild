@@ -93,7 +93,55 @@ exec /opt/CMCLIENT/cmlauncher $DISPLAY_FLAGS "$@" 2>&1 || {
 }
 EOF
 
-	# Enhanced debug launcher (also without compatibility flags)
+	# Create Shw wrapper script (with --disable-gpu for Wayland)
+	exeinto /usr/bin
+	newexe - cmclient-Shw <<'EOF'
+#!/bin/bash
+set -e
+
+# Create required directories
+mkdir -p "${HOME}/.local/share/.minecraft/cmclient"
+mkdir -p "${HOME}/.config/cmclient"
+
+CONFIG_DIR="${HOME}/.local/share/.minecraft/cmclient"
+SHARED_JSON="${CONFIG_DIR}/shared.json"
+
+if [ ! -f "${SHARED_JSON}" ]; then
+    echo '{}' > "${SHARED_JSON}"
+    chmod 600 "${SHARED_JSON}"
+fi
+
+# Kill any hung processes first
+pkill -f "cmclient|cmlauncher" 2>/dev/null || true
+sleep 1
+
+# Check if binary exists and is executable
+if [ ! -x "/opt/CMCLIENT/cmlauncher" ]; then
+    echo "ERROR: /opt/CMCLIENT/cmlauncher not found or not executable" >&2
+    exit 1
+fi
+
+# Display server detection (with --disable-gpu for Wayland)
+if [ -n "$WAYLAND_DISPLAY" ]; then
+    DISPLAY_FLAGS="--enable-features=UseOzonePlatform --ozone-platform=wayland --disable-gpu"
+elif [ -n "$DISPLAY" ]; then
+    DISPLAY_FLAGS="--enable-features=UseOzonePlatform --ozone-platform=x11"
+else
+    DISPLAY_FLAGS="--disable-gpu"
+fi
+
+# Set library path to ensure all dependencies are found
+export LD_LIBRARY_PATH="/opt/CMCLIENT:${LD_LIBRARY_PATH}"
+
+# Execute with error handling
+exec /opt/CMCLIENT/cmlauncher $DISPLAY_FLAGS "$@" 2>&1 || {
+    echo "ERROR: CMClient launcher failed to start" >&2
+    echo "Try running 'cmclient-debug' for more information" >&2
+    exit 1
+}
+EOF
+
+	# Enhanced debug launcher (unchanged)
 	exeinto /usr/bin
 	newexe - cmclient-debug <<'EOF'
 #!/bin/bash
@@ -218,13 +266,21 @@ EOF
 		ewarn "Icon directory not found in package"
 	fi
 
-	# Create desktop entry
+	# Create desktop entry for main launcher
 	make_desktop_entry \
 		"cmclient" \
 		"CMClient" \
 		"cmclient" \
 		"Game;Network;Communication;" \
 		"Comment=Minecraft Client Launcher\nGenericName=Minecraft Launcher\nStartupNotify=true\nStartupWMClass=cmclient\nMimeType=application/x-minecraft-launcher;\nKeywords=Minecraft;Game;Launcher;"
+
+	# Create desktop entry for Shw launcher
+	make_desktop_entry \
+		"cmclient-Shw" \
+		"CMClient (Software Rendering)" \
+		"cmclient" \
+		"Game;Network;Communication;" \
+		"Comment=Minecraft Client Launcher - Software Rendering Mode\nGenericName=Minecraft Launcher Software\nStartupNotify=true\nNoDisplay=false;"
 
 	# Create desktop entry for debug mode
 	make_desktop_entry \
@@ -254,6 +310,7 @@ pkg_postinst() {
 	elog ""
 	elog "Available launchers:"
 	elog "  cmclient              - Main launcher (no compatibility flags)"
+	elog "  cmclient-Shw          - Software rendering mode (Wayland with --disable-gpu)"
 	elog "  cmclient-debug        - Debug mode with diagnostics"
 	elog "  cmclient-reset        - Reset configuration"
 	elog ""
@@ -264,11 +321,7 @@ pkg_postinst() {
 	elog "  ~/.local/share/.minecraft/cmclient/shared.json"
 	elog "  ~/.config/cmclient/"
 	elog ""
-	elog "NOTE: Compatibility flags removed - if you experience issues,"
-	elog "you may need to manually add specific flags based on your system."
-	elog ""
-	elog "Wayland and X11 support"
-	elog ""
+	elog "NOTE: Use 'cmclient-Shw' for systems where Wayland GPU acceleration is problematic."
 	elog "For more information visit: https://cm-pack.pl/download"
 }
 
