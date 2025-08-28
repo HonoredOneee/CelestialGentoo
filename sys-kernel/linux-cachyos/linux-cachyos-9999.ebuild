@@ -5,12 +5,9 @@ EAPI=8
 
 inherit toolchain-funcs
 
-# Defina aqui a versão mais recente manualmente
-CACHYOS_VERSION="6.14.8"
-
 DESCRIPTION="CachyOS Kernel with performance patches"
 HOMEPAGE="https://github.com/CachyOS/linux-cachyos"
-SRC_URI="https://github.com/CachyOS/linux-cachyos/archive/refs/tags/${CACHYOS_VERSION}.tar.gz -> ${P}.tar.gz"
+SRC_URI="https://github.com/CachyOS/linux-cachyos/archive/refs/tags/${PV}.tar.gz -> ${P}.tar.gz"
 
 LICENSE="GPL-2"
 SLOT="0"
@@ -27,7 +24,33 @@ RDEPEND="${DEPEND}
 	sys-kernel/dracut
 "
 
-S="${WORKDIR}/linux-cachyos-${CACHYOS_VERSION}"
+# Função para obter a última versão do GitHub
+get_latest_version() {
+	local api_url="https://api.github.com/repos/CachyOS/linux-cachyos/releases/latest"
+	local version=$(curl -s ${api_url} | grep -oP '"tag_name": "\K([^"]+)' | head -1)
+	echo "${version}"
+}
+
+pkg_setup() {
+	# Obter versão mais recente automaticamente
+	CACHYOS_VERSION=$(get_latest_version)
+
+	# Verificar se conseguiu obter a versão
+	if [[ -z "${CACHYOS_VERSION}" ]]; then
+		die "Falha ao obter a versão mais recente do GitHub. Verifique a conexão de internet."
+	fi
+
+	# Atualizar SRC_URI com a versão obtida
+	SRC_URI="https://github.com/CachyOS/linux-cachyos/archive/refs/tags/${CACHYOS_VERSION}.tar.gz -> ${P}.tar.gz"
+}
+
+src_unpack() {
+	# Forçar o redownload do source com a versão correta
+	unpack ${A}
+
+	# Renomear diretório para o esperado
+	mv linux-cachyos-${CACHYOS_VERSION} "${S}" || die
+}
 
 src_prepare() {
 	default
@@ -82,7 +105,4 @@ pkg_postinst() {
 	elog ""
 	elog "Atualize seu bootloader:"
 	elog "  grub-mkconfig -o /boot/grub/grub.cfg"
-	elog ""
-	elog "Para verificar versões mais recentes disponíveis:"
-	elog "  curl -s https://api.github.com/repos/CachyOS/linux-cachyos/releases/latest | grep tag_name"
 }
