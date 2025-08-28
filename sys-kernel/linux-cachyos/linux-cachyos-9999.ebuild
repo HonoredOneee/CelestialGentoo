@@ -12,44 +12,45 @@ SRC_URI="https://github.com/CachyOS/linux-cachyos/archive/refs/tags/${PV}.tar.gz
 LICENSE="GPL-2"
 SLOT="0"
 KEYWORDS="~amd64"
+IUSE="+initramfs"
 
 DEPEND="
 	sys-apps/kmod
 	sys-apps/util-linux
 	dev-util/pahole
 	sys-kernel/linux-firmware
+	net-misc/curl
 "
 RDEPEND="${DEPEND}
 	sys-boot/grub
 	sys-kernel/dracut
 "
 
-# Função para obter a última versão do GitHub
-get_latest_version() {
-	local api_url="https://api.github.com/repos/CachyOS/linux-cachyos/releases/latest"
-	local version=$(curl -s ${api_url} | grep -oP '"tag_name": "\K([^"]+)' | head -1)
-	echo "${version}"
-}
+# Nome do kernel (será atualizado em pkg_setup)
+CACHYOS_VERSION=""
 
 pkg_setup() {
 	# Obter versão mais recente automaticamente
-	CACHYOS_VERSION=$(get_latest_version)
+	einfo "Buscando versão mais recente do kernel CachyOS..."
+	CACHYOS_VERSION=$(curl -s https://api.github.com/repos/CachyOS/linux-cachyos/releases/latest | grep -oP '"tag_name": "\K([^"]+)' | head -1)
 
 	# Verificar se conseguiu obter a versão
 	if [[ -z "${CACHYOS_VERSION}" ]]; then
-		die "Falha ao obter a versão mais recente do GitHub. Verifique a conexão de internet."
+		ewarn "Falha ao obter a versão mais recente do GitHub. Usando versão do ebuild: ${PV}"
+		CACHYOS_VERSION="${PV}"
+	else
+		einfo "Versão mais recente encontrada: ${CACHYOS_VERSION}"
 	fi
-
-	# Atualizar SRC_URI com a versão obtida
-	SRC_URI="https://github.com/CachyOS/linux-cachyos/archive/refs/tags/${CACHYOS_VERSION}.tar.gz -> ${P}.tar.gz"
 }
 
 src_unpack() {
-	# Forçar o redownload do source com a versão correta
-	unpack ${A}
+	# Se a versão foi obtida com sucesso, baixar o tarball correto
+	if [[ "${CACHYOS_VERSION}" != "${PV}" ]]; then
+		einfo "Baixando versão ${CACHYOS_VERSION}..."
+		curl -L "https://github.com/CachyOS/linux-cachyos/archive/refs/tags/${CACHYOS_VERSION}.tar.gz" -o "${P}.tar.gz" || die
+	fi
 
-	# Renomear diretório para o esperado
-	mv linux-cachyos-${CACHYOS_VERSION} "${S}" || die
+	default
 }
 
 src_prepare() {
@@ -87,21 +88,28 @@ src_install() {
 pkg_postinst() {
 	elog "Kernel CachyOS ${CACHYOS_VERSION} instalado com sucesso!"
 	elog ""
-	elog "Gerando initramfs com dracut..."
-	local KNAME="linux-cachyos-${CACHYOS_VERSION}"
 
-	if command -v dracut &>/dev/null; then
-		dracut --kver "${CACHYOS_VERSION}" --force "/boot/initramfs-${KNAME}.img" || ewarn "Falha ao gerar initramfs"
-	else
-		ewarn "Dracut não encontrado! Initramfs não foi gerado."
+	if use initramfs; then
+		elog "Gerando initramfs com dracut..."
+		local KNAME="linux-cachyos-${CACHYOS_VERSION}"
+
+		if command -v dracut &>/dev/null; then
+			dracut --kver "${CACHYOS_VERSION}" --force "/boot/initramfs-${KNAME}.img" || ewarn "Falha ao gerar initramfs"
+		else
+			ewarn "Dracut não encontrado! Initramfs não foi gerado."
+		fi
 	fi
 
 	elog ""
 	elog "Arquivos instalados:"
 	elog "  /boot/vmlinuz-${KNAME}"
-	elog "  /boot/initramfs-${KNAME}.img"
 	elog "  /boot/config-${KNAME}"
 	elog "  /boot/System.map-${KNAME}"
+
+	if use initramfs; then
+		elog "  /boot/initramfs-${KNAME}.img"
+	fi
+
 	elog ""
 	elog "Atualize seu bootloader:"
 	elog "  grub-mkconfig -o /boot/grub/grub.cfg"
